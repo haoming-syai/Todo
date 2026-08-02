@@ -4,9 +4,6 @@
  * ============================================================================
  * [VIEW] — Login form (email/password + Google)
  * ============================================================================
- * Important: login is NOT a tRPC mutation.
- * We call Auth.js: signIn("credentials" | "google").
- * That hits /api/auth/[...nextauth] (the Auth.js ROUTE).
  */
 
 import Link from "next/link";
@@ -24,11 +21,10 @@ export function LoginForm() {
     setError(null);
     setPending(true);
 
-    // provider id "credentials" matches Credentials({…}) in auth config
     const result = await signIn("credentials", {
       email,
       password,
-      redirect: false, // stay here so we can show errors
+      redirect: false,
     });
 
     setPending(false);
@@ -38,55 +34,67 @@ export function LoginForm() {
       return;
     }
 
-    // Full navigation so Server Components re-read the new session cookie
     window.location.href = "/";
   }
 
   return (
-    <div className="w-full max-w-sm space-y-6">
-      <form onSubmit={onEmailLogin} className="flex flex-col gap-3">
-        <input
-          type="email"
-          required
-          placeholder="Email"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          className="rounded-lg bg-white/10 px-4 py-2 text-white placeholder:text-white/40"
-        />
-        <input
-          type="password"
-          required
-          minLength={6}
-          placeholder="Password"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          className="rounded-lg bg-white/10 px-4 py-2 text-white placeholder:text-white/40"
-        />
-        {error && <p className="text-sm text-red-300">{error}</p>}
-        <button
-          type="submit"
-          disabled={pending}
-          className="rounded-full bg-emerald-600 px-6 py-2 font-semibold transition hover:bg-emerald-500 disabled:opacity-50"
-        >
+    <div className="space-y-5">
+      <form onSubmit={onEmailLogin} className="space-y-3">
+        <div>
+          <label htmlFor="login-email" className="label">
+            Email
+          </label>
+          <input
+            id="login-email"
+            type="email"
+            required
+            autoComplete="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            className="field"
+          />
+        </div>
+        <div>
+          <label htmlFor="login-password" className="label">
+            Password
+          </label>
+          <input
+            id="login-password"
+            type="password"
+            required
+            minLength={6}
+            autoComplete="current-password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            className="field"
+          />
+        </div>
+        {error && (
+          <p className="text-sm text-danger" role="alert">
+            {error}
+          </p>
+        )}
+        <button type="submit" disabled={pending} className="btn-primary w-full">
           {pending ? "Signing in…" : "Sign in with email"}
         </button>
       </form>
 
-      <div className="relative text-center text-sm text-white/40">
-        <span className="bg-[#0f1410] px-2">or</span>
+      <div className="relative text-center text-xs text-faint">
+        <span className="relative z-10 bg-bg px-2">or</span>
+        <span className="absolute inset-x-0 top-1/2 h-px -translate-y-1/2 bg-border" />
       </div>
 
       <button
         type="button"
         onClick={() => signIn("google", { callbackUrl: "/" })}
-        className="w-full rounded-full bg-white/10 px-6 py-2 font-semibold transition hover:bg-white/20"
+        className="btn-secondary w-full"
       >
         Continue with Google
       </button>
 
-      <p className="text-center text-sm text-white/60">
+      <p className="text-center text-sm text-muted">
         No account?{" "}
-        <Link href="/register" className="text-emerald-400 underline">
+        <Link href="/register" className="font-medium text-primary hover:underline">
           Register
         </Link>
       </p>

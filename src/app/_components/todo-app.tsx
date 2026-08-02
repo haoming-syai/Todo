@@ -18,7 +18,6 @@ export function TodoApp() {
   const [newListName, setNewListName] = useState("");
   const [inviteEmail, setInviteEmail] = useState("");
 
-  // Pick first list once loaded
   useEffect(() => {
     if (!activeListId && lists[0]) {
       setActiveListId(lists[0].id);
@@ -45,57 +44,50 @@ export function TodoApp() {
   const active = lists.find((l) => l.id === activeListId) ?? null;
 
   return (
-    <div className="flex w-full max-w-3xl flex-col gap-6 md:flex-row md:items-start">
-      {/* ----- Sidebar: lists ----- */}
-      <aside className="w-full shrink-0 space-y-4 md:w-56">
-        <section>
-          <h2 className="mb-2 text-xs font-semibold tracking-wide text-white/50 uppercase">
-            Personal
-          </h2>
-          <ul className="space-y-1">
+    <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:gap-8">
+      <aside className="w-full shrink-0 space-y-6 lg:w-56">
+        <nav aria-label="Personal lists" className="space-y-2">
+          <p className="px-2.5 text-xs font-medium text-faint">Personal</p>
+          <ul className="space-y-0.5">
             {personal.map((list) => (
               <li key={list.id}>
                 <button
                   type="button"
                   onClick={() => setActiveListId(list.id)}
-                  className={`w-full rounded-lg px-3 py-2 text-left text-sm transition ${
-                    activeListId === list.id
-                      ? "bg-emerald-600/40 text-white"
-                      : "bg-white/5 text-white/80 hover:bg-white/10"
-                  }`}
+                  className={
+                    activeListId === list.id ? "nav-item-active" : "nav-item"
+                  }
                 >
-                  {list.name}
-                  <span className="ml-1 text-white/40">
-                    ({list._count.todos})
+                  <span className="truncate">{list.name}</span>
+                  <span className="text-xs text-faint tabular-nums">
+                    {list._count.todos}
                   </span>
                 </button>
               </li>
             ))}
           </ul>
-        </section>
+        </nav>
 
-        <section>
-          <h2 className="mb-2 text-xs font-semibold tracking-wide text-white/50 uppercase">
-            Shared
-          </h2>
-          <ul className="space-y-1">
+        <nav aria-label="Shared lists" className="space-y-2">
+          <p className="px-2.5 text-xs font-medium text-faint">Shared</p>
+          <ul className="space-y-0.5">
             {shared.length === 0 && (
-              <li className="px-3 text-xs text-white/40">No shared lists yet</li>
+              <li className="px-2.5 py-2 text-xs text-faint">
+                Invite someone to collaborate.
+              </li>
             )}
             {shared.map((list) => (
               <li key={list.id}>
                 <button
                   type="button"
                   onClick={() => setActiveListId(list.id)}
-                  className={`w-full rounded-lg px-3 py-2 text-left text-sm transition ${
-                    activeListId === list.id
-                      ? "bg-emerald-600/40 text-white"
-                      : "bg-white/5 text-white/80 hover:bg-white/10"
-                  }`}
+                  className={
+                    activeListId === list.id ? "nav-item-active" : "nav-item"
+                  }
                 >
-                  {list.name}
-                  <span className="ml-1 text-white/40">
-                    ({list._count.todos})
+                  <span className="truncate">{list.name}</span>
+                  <span className="text-xs text-faint tabular-nums">
+                    {list._count.todos}
                   </span>
                 </button>
               </li>
@@ -103,7 +95,7 @@ export function TodoApp() {
           </ul>
 
           <form
-            className="mt-3 flex flex-col gap-2"
+            className="space-y-2 pt-1"
             onSubmit={(e) => {
               e.preventDefault();
               const name = newListName.trim();
@@ -115,55 +107,56 @@ export function TodoApp() {
               value={newListName}
               onChange={(e) => setNewListName(e.target.value)}
               placeholder="New shared list"
-              className="rounded-lg bg-white/10 px-3 py-2 text-sm text-white placeholder:text-white/40"
+              className="field"
+              aria-label="New shared list name"
             />
             <button
               type="submit"
               disabled={createList.isPending || !newListName.trim()}
-              className="rounded-full bg-white/10 px-3 py-1.5 text-sm font-semibold transition hover:bg-white/20 disabled:opacity-50"
+              className="btn-secondary w-full"
             >
               Create shared list
             </button>
           </form>
           {createList.error && (
-            <p className="mt-1 text-xs text-red-300">
+            <p className="text-xs text-danger" role="alert">
               {createList.error.message}
             </p>
           )}
-        </section>
+        </nav>
       </aside>
 
-      {/* ----- Main: todos for active list ----- */}
-      <div className="min-w-0 flex-1 space-y-4">
+      <section className="min-w-0 flex-1 space-y-4">
         {active ? (
           <>
-            <div className="flex flex-wrap items-baseline justify-between gap-2">
-              <h2 className="text-xl font-semibold text-white">
-                {active.name}{" "}
-                <span className="text-sm font-normal text-white/50">
-                  {active.isShared ? "shared" : "personal"}
-                </span>
-              </h2>
+            <div className="flex flex-wrap items-center gap-2">
+              <h1 className="text-xl font-semibold tracking-tight text-ink">
+                {active.name}
+              </h1>
+              <span
+                className={active.isShared ? "chip-shared" : "chip-personal"}
+              >
+                {active.isShared ? "Shared" : "Personal"}
+              </span>
             </div>
 
-            {/* Invite (owner of shared / any list you own) */}
-            {active.ownerId && (
-              <InviteForm
-                listId={active.id}
-                members={active.members}
-                inviteEmail={inviteEmail}
-                setInviteEmail={setInviteEmail}
-                invite={invite}
-                error={invite.error?.message}
-              />
-            )}
+            <InviteForm
+              listId={active.id}
+              members={active.members}
+              inviteEmail={inviteEmail}
+              setInviteEmail={setInviteEmail}
+              invite={invite}
+              error={invite.error?.message}
+            />
 
             <TodoPanel listId={active.id} />
           </>
         ) : (
-          <p className="text-white/70">Loading lists…</p>
+          <div className="panel p-8 text-sm text-muted">
+            Select a list to get started.
+          </div>
         )}
-      </div>
+      </section>
     </div>
   );
 }
@@ -189,15 +182,13 @@ function InviteForm({
   error?: string;
 }) {
   return (
-    <div className="rounded-lg bg-white/5 p-3 text-sm">
-      <p className="mb-2 text-white/60">
-        Members:{" "}
-        {members
-          .map((m) => m.user.name ?? m.user.email ?? "user")
-          .join(", ")}
+    <div className="panel space-y-3 p-4">
+      <p className="text-sm text-muted">
+        <span className="font-medium text-ink">Members · </span>
+        {members.map((m) => m.user.name ?? m.user.email ?? "user").join(", ")}
       </p>
       <form
-        className="flex flex-wrap gap-2"
+        className="flex flex-col gap-2 sm:flex-row"
         onSubmit={(e) => {
           e.preventDefault();
           const email = inviteEmail.trim();
@@ -210,19 +201,24 @@ function InviteForm({
           value={inviteEmail}
           onChange={(e) => setInviteEmail(e.target.value)}
           placeholder="Invite by email"
-          className="min-w-[12rem] flex-1 rounded-lg bg-white/10 px-3 py-2 text-white placeholder:text-white/40"
+          className="field flex-1"
+          aria-label="Invite email"
         />
         <button
           type="submit"
           disabled={invite.isPending || !inviteEmail.trim()}
-          className="rounded-full bg-emerald-600/80 px-4 py-2 font-semibold transition hover:bg-emerald-500 disabled:opacity-50"
+          className="btn-secondary shrink-0"
         >
           Invite
         </button>
       </form>
-      {error && <p className="mt-1 text-xs text-red-300">{error}</p>}
-      <p className="mt-1 text-xs text-white/40">
-        Invitee must already have an account (same app).
+      {error && (
+        <p className="text-xs text-danger" role="alert">
+          {error}
+        </p>
+      )}
+      <p className="text-xs text-faint">
+        They need an account in this app first.
       </p>
     </div>
   );
@@ -306,27 +302,29 @@ function TodoPanel({ listId }: { listId: string }) {
   }
 
   return (
-    <div className="flex flex-col gap-4">
-      <p className="text-xs text-white/50">
-        Realtime:{" "}
-        <span
-          className={
-            realtimeStatus === "live"
-              ? "text-emerald-400"
-              : realtimeStatus === "error"
-                ? "text-red-300"
-                : "text-white/50"
-          }
-        >
-          {realtimeStatus === "live"
-            ? "live"
-            : realtimeStatus === "subscribing"
-              ? "connecting…"
-              : realtimeStatus === "error"
-                ? "error"
-                : "off"}
-        </span>
-      </p>
+    <div className="space-y-4">
+      <div className="flex items-center justify-between gap-3">
+        <p className="text-xs text-faint">
+          Sync{" "}
+          <span
+            className={
+              realtimeStatus === "live"
+                ? "font-medium text-success"
+                : realtimeStatus === "error"
+                  ? "font-medium text-danger"
+                  : "text-muted"
+            }
+          >
+            {realtimeStatus === "live"
+              ? "live"
+              : realtimeStatus === "subscribing"
+                ? "connecting…"
+                : realtimeStatus === "error"
+                  ? "offline"
+                  : "idle"}
+          </span>
+        </p>
+      </div>
 
       <form
         onSubmit={(e) => {
@@ -341,13 +339,14 @@ function TodoPanel({ listId }: { listId: string }) {
           type="text"
           value={title}
           onChange={(e) => setTitle(e.target.value)}
-          placeholder="What needs doing?"
-          className="min-w-0 flex-1 rounded-lg bg-white/10 px-4 py-2 text-white placeholder:text-white/40"
+          placeholder="Add a todo…"
+          className="field flex-1"
+          aria-label="New todo title"
         />
         <button
           type="submit"
           disabled={createTodo.isPending || !title.trim()}
-          className="rounded-full bg-emerald-600 px-5 py-2 font-semibold transition hover:bg-emerald-500 disabled:opacity-50"
+          className="btn-primary shrink-0"
         >
           {createTodo.isPending ? "Adding…" : "Add"}
         </button>
@@ -358,7 +357,7 @@ function TodoPanel({ listId }: { listId: string }) {
         deleteTodo.error ??
         removeImage.error ??
         uploadError) && (
-        <p className="text-sm text-red-300">
+        <p className="text-sm text-danger" role="alert">
           {createTodo.error?.message ??
             updateTodo.error?.message ??
             deleteTodo.error?.message ??
@@ -368,14 +367,16 @@ function TodoPanel({ listId }: { listId: string }) {
       )}
 
       {!todos.length ? (
-        <p className="text-white/70">No todos yet — add one above.</p>
+        <div className="panel px-5 py-10 text-center">
+          <p className="font-medium text-ink">No todos yet</p>
+          <p className="mt-1 text-sm text-muted">
+            Type above and press Add — this list updates live for members.
+          </p>
+        </div>
       ) : (
-        <ul className="space-y-3 text-left">
+        <ul className="panel divide-y divide-border overflow-hidden">
           {todos.map((todo) => (
-            <li
-              key={todo.id}
-              className="flex flex-col gap-2 rounded-lg bg-white/10 px-4 py-3 text-white"
-            >
+            <li key={todo.id} className="space-y-3 px-4 py-3 transition-colors duration-150 hover:bg-surface">
               <div className="flex items-center gap-3">
                 <input
                   type="checkbox"
@@ -387,7 +388,8 @@ function TodoPanel({ listId }: { listId: string }) {
                       completed: !todo.completed,
                     })
                   }
-                  className="size-4 accent-emerald-500"
+                  className="size-4 rounded border-border text-primary accent-primary"
+                  aria-label={`Mark "${todo.title}" complete`}
                 />
 
                 {editingId === todo.id ? (
@@ -397,7 +399,8 @@ function TodoPanel({ listId }: { listId: string }) {
                     onChange={(e) => setEditingTitle(e.target.value)}
                     onBlur={() => {
                       const trimmed = editingTitle.trim();
-                      if (trimmed) updateTodo.mutate({ id: todo.id, title: trimmed });
+                      if (trimmed)
+                        updateTodo.mutate({ id: todo.id, title: trimmed });
                     }}
                     onKeyDown={(e) => {
                       if (e.key === "Enter") {
@@ -408,7 +411,7 @@ function TodoPanel({ listId }: { listId: string }) {
                       }
                       if (e.key === "Escape") setEditingId(null);
                     }}
-                    className="min-w-0 flex-1 rounded bg-black/30 px-2 py-1 text-white"
+                    className="field flex-1 py-1.5"
                   />
                 ) : (
                   <button
@@ -417,8 +420,10 @@ function TodoPanel({ listId }: { listId: string }) {
                       setEditingId(todo.id);
                       setEditingTitle(todo.title);
                     }}
-                    className={`min-w-0 flex-1 text-left ${
-                      todo.completed ? "line-through opacity-60" : ""
+                    className={`min-w-0 flex-1 text-left text-sm ${
+                      todo.completed
+                        ? "text-faint line-through"
+                        : "text-ink"
                     }`}
                   >
                     {todo.title}
@@ -433,7 +438,7 @@ function TodoPanel({ listId }: { listId: string }) {
                       deleteTodo.mutate({ id: todo.id });
                     }
                   }}
-                  className="shrink-0 text-sm text-red-300/80 hover:text-red-200 disabled:opacity-50"
+                  className="btn-danger shrink-0 px-2 py-1 text-xs"
                 >
                   Delete
                 </button>
@@ -445,14 +450,16 @@ function TodoPanel({ listId }: { listId: string }) {
                   <img
                     src={todo.imageUrl}
                     alt=""
-                    className="h-14 w-14 rounded object-cover"
+                    className="h-12 w-12 rounded-md border border-border object-cover"
                   />
-                ) : (
-                  <span className="text-xs text-white/40">No image</span>
-                )}
+                ) : null}
 
-                <label className="cursor-pointer text-sm text-emerald-300/90 hover:text-emerald-200">
-                  {uploadingId === todo.id ? "Uploading…" : "Add image"}
+                <label className="cursor-pointer text-xs font-medium text-primary hover:underline">
+                  {uploadingId === todo.id
+                    ? "Uploading…"
+                    : todo.imageUrl
+                      ? "Replace image"
+                      : "Add image"}
                   <input
                     type="file"
                     accept="image/jpeg,image/png,image/webp,image/gif"
@@ -474,9 +481,9 @@ function TodoPanel({ listId }: { listId: string }) {
                         removeImage.mutate({ id: todo.id });
                       }
                     }}
-                    className="text-sm text-red-300/80 hover:text-red-200 disabled:opacity-50"
+                    className="btn-danger px-0 py-0 text-xs"
                   >
-                    Remove image
+                    Remove
                   </button>
                 )}
               </div>

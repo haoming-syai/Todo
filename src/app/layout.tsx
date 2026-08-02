@@ -8,7 +8,7 @@ import { TRPCReactProvider } from "~/trpc/react";
 
 export const metadata: Metadata = {
   title: "T3 Todo",
-  description: "Learn the T3 stack by building a Todo app",
+  description: "Personal and shared lists — learn the T3 stack by building",
   icons: [{ rel: "icon", url: "/favicon.ico" }],
 };
 
