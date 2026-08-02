@@ -87,10 +87,10 @@ export const createTRPCRouter = t.router;
 const timingMiddleware = t.middleware(async ({ next, path }) => {
   const start = Date.now();
 
+  // create-t3-app ships a random 100–500ms delay to simulate latency.
+  // That makes Realtime → refetch feel sluggish while learning, so keep it tiny.
   if (t._config.isDev) {
-    // artificial delay in dev
-    const waitMs = Math.floor(Math.random() * 400) + 100;
-    await new Promise((resolve) => setTimeout(resolve, waitMs));
+    await new Promise((resolve) => setTimeout(resolve, 50));
   }
 
   const result = await next();
@@ -121,7 +121,7 @@ export const publicProcedure = t.procedure.use(timingMiddleware);
 export const protectedProcedure = t.procedure
   .use(timingMiddleware)
   .use(({ ctx, next }) => {
-    if (!ctx.session?.user) {
+    if (!ctx.session?.user?.id) {
       throw new TRPCError({ code: "UNAUTHORIZED" });
     }
     return next({

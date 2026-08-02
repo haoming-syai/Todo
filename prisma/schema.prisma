@@ -8,23 +8,65 @@ generator client {
 
 datasource db {
     provider = "postgresql"
-    // NOTE: When using mysql or sqlserver, uncomment the @db.Text annotations in model Account below
-    // Further reading:
-    // https://next-auth.js.org/adapters/prisma#create-the-prisma-schema
-    // https://www.prisma.io/docs/reference/api-reference/prisma-schema-reference#string
-    url      = env("DATABASE_URL")
+    // DATABASE_URL = Supabase pooler (app queries). DIRECT_URL = direct :5432 (migrations / db push).
+    url       = env("DATABASE_URL")
+    directUrl = env("DIRECT_URL")
 }
 
-model Post {
-    id        Int      @id @default(autoincrement())
+// ============================================================================
+// [MODEL] — A2: Todos live on a LIST
+//   Personal list  → isShared=false, only you are a member
+//   Shared list    → isShared=true, invite others by email
+// ============================================================================
+
+model TodoList {
+    id        String   @id @default(cuid())
     name      String
+    isShared  Boolean  @default(false)
     createdAt DateTime @default(now())
     updatedAt DateTime @updatedAt
 
-    createdBy   User   @relation(fields: [createdById], references: [id])
+    ownerId String
+    owner   User   @relation("OwnedLists", fields: [ownerId], references: [id], onDelete: Cascade)
+
+    members TodoListMember[]
+    todos   Todo[]
+
+    @@index([ownerId])
+}
+
+model TodoListMember {
+    id       String   @id @default(cuid())
+    listId   String
+    userId   String
+    role     String   @default("MEMBER") // OWNER | MEMBER
+    joinedAt DateTime @default(now())
+
+    list TodoList @relation(fields: [listId], references: [id], onDelete: Cascade)
+    user User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+    @@unique([listId, userId])
+    @@index([userId])
+}
+
+model Todo {
+    id        String   @id @default(cuid())
+    title     String
+    completed Boolean  @default(false)
+    // S6: public URL from Supabase Storage (null until an image is attached)
+    imageUrl  String?
+    createdAt DateTime @default(now())
+    updatedAt DateTime @updatedAt
+
+    // A2: todo belongs to a list (access = list membership, not only creator)
+    listId String
+    list   TodoList @relation(fields: [listId], references: [id], onDelete: Cascade)
+
+    createdBy   User   @relation(fields: [createdById], references: [id], onDelete: Cascade)
     createdById String
 
-    @@index([name])
+    @@index([listId])
+    @@index([createdById])
 }
 
 // Necessary for Next auth
@@ -61,9 +103,14 @@ model User {
     email         String?   @unique
     emailVerified DateTime?
     image         String?
+    // S2: email/password users store a bcrypt hash here.
+    // Google-only users leave this null (they authenticate via Account table).
+    passwordHash  String?
     accounts      Account[]
     sessions      Session[]
-    posts         Post[]
+    todos         Todo[]
+    ownedLists    TodoList[]       @relation("OwnedLists")
+    memberships   TodoListMember[]
 }
 
 model VerificationToken {
