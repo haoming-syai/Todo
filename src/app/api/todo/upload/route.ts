@@ -64,7 +64,13 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Todo not found" }, { status: 404 });
   }
 
-  const ext = file.name.split(".").pop() ?? "jpg";
+  const extByType: Record<string, string> = {
+    "image/jpeg": "jpg",
+    "image/png": "png",
+    "image/webp": "webp",
+    "image/gif": "gif",
+  };
+  const ext = extByType[file.type] ?? "jpg";
   const path = `${session.user.id}/${todoId}/${Date.now()}.${ext}`;
 
   const supabase = createSupabaseBrowserClient();

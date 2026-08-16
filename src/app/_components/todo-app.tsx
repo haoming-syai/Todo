@@ -2,26 +2,53 @@
 
 /**
  * ============================================================================
- * [VIEW] — A2 app shell: personal + shared lists + todos + images
+ * [VIEW] — signed-in shell: rail of lists + the open list
  * ============================================================================
  */
 
+import { useSession } from "next-auth/react";
 import { useEffect, useState } from "react";
 
+import {
+  IconClose,
+  IconImage,
+  IconPeople,
+  IconPlus,
+  IconTrash,
+} from "~/app/_components/icons";
 import { useTodoRealtime } from "~/hooks/use-todo-realtime";
 import { api } from "~/trpc/react";
 
+type ListItem = {
+  id: string;
+  name: string;
+  isShared: boolean;
+  ownerId: string;
+  members: {
+    user: { id: string; name: string | null; email: string | null };
+  }[];
+  _count: { todos: number };
+};
+
 export function TodoApp() {
+  const { data: session } = useSession();
   const utils = api.useUtils();
   const [lists] = api.list.getMine.useSuspenseQuery();
-  const [activeListId, setActiveListId] = useState<string | null>(null);
+  const [activeListId, setActiveListId] = useState<string | null>(
+    () => lists[0]?.id ?? null,
+  );
   const [newListName, setNewListName] = useState("");
+  const [newPersonalName, setNewPersonalName] = useState("");
+  const [inviteOpen, setInviteOpen] = useState(false);
   const [inviteEmail, setInviteEmail] = useState("");
+  const [editingList, setEditingList] = useState(false);
+  const [listNameDraft, setListNameDraft] = useState("");
 
   useEffect(() => {
-    if (!activeListId && lists[0]) {
-      setActiveListId(lists[0].id);
-    }
+    if (activeListId && lists.some((list) => list.id === activeListId)) return;
+    setActiveListId(lists[0]?.id ?? null);
+    setInviteOpen(false);
+    setEditingList(false);
   }, [lists, activeListId]);
 
   const createList = api.list.create.useMutation({
@@ -29,6 +56,8 @@ export function TodoApp() {
       await utils.list.getMine.invalidate();
       setActiveListId(list.id);
       setNewListName("");
+      setNewPersonalName("");
+      setEditingList(false);
     },
   });
 
@@ -39,140 +68,304 @@ export function TodoApp() {
     },
   });
 
+  const updateList = api.list.update.useMutation({
+    onSuccess: async () => {
+      await utils.list.getMine.invalidate();
+      setEditingList(false);
+    },
+  });
+
+  const deleteList = api.list.delete.useMutation({
+    onSuccess: async () => {
+      await utils.list.getMine.invalidate();
+      await utils.todo.getByList.invalidate();
+      setInviteOpen(false);
+      setEditingList(false);
+    },
+  });
+
   const personal = lists.filter((l) => !l.isShared);
   const shared = lists.filter((l) => l.isShared);
   const active = lists.find((l) => l.id === activeListId) ?? null;
+  const isOwner = Boolean(active && session?.user?.id === active.ownerId);
 
   return (
-    <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:gap-8">
-      <aside className="w-full shrink-0 space-y-6 lg:w-56">
-        <nav aria-label="Personal lists" className="space-y-2">
-          <p className="px-2.5 text-xs font-medium text-faint">Personal</p>
-          <ul className="space-y-0.5">
-            {personal.map((list) => (
-              <li key={list.id}>
-                <button
-                  type="button"
-                  onClick={() => setActiveListId(list.id)}
-                  className={
-                    activeListId === list.id ? "nav-item-active" : "nav-item"
-                  }
-                >
-                  <span className="truncate">{list.name}</span>
-                  <span className="text-xs text-faint tabular-nums">
-                    {list._count.todos}
-                  </span>
-                </button>
-              </li>
-            ))}
-          </ul>
-        </nav>
+    <div className="flex min-h-0 w-full flex-1 flex-col lg:flex-row">
+      <aside className="border-b border-border bg-rail px-3 py-4 lg:w-60 lg:border-r lg:border-b-0 lg:py-5">
+        <div className="space-y-5">
+          <nav aria-label="Personal lists" className="space-y-1.5">
+            <p className="px-2.5 text-xs font-medium text-faint">Personal</p>
+            <ul className="flex gap-1 overflow-x-auto pb-0.5 lg:block lg:space-y-0.5 lg:overflow-visible lg:pb-0">
+              {personal.length === 0 && (
+                <li className="hidden px-2.5 py-1 text-xs text-faint lg:block">
+                  None yet — create one below.
+                </li>
+              )}
+              {personal.map((list) => (
+                <li key={list.id} className="min-w-max lg:min-w-0">
+                  <ListButton
+                    list={list}
+                    active={activeListId === list.id}
+                    onSelect={() => {
+                      setActiveListId(list.id);
+                      setInviteOpen(false);
+                      setEditingList(false);
+                    }}
+                  />
+                </li>
+              ))}
+            </ul>
 
-        <nav aria-label="Shared lists" className="space-y-2">
-          <p className="px-2.5 text-xs font-medium text-faint">Shared</p>
-          <ul className="space-y-0.5">
-            {shared.length === 0 && (
-              <li className="px-2.5 py-2 text-xs text-faint">
-                Invite someone to collaborate.
-              </li>
-            )}
-            {shared.map((list) => (
-              <li key={list.id}>
-                <button
-                  type="button"
-                  onClick={() => setActiveListId(list.id)}
-                  className={
-                    activeListId === list.id ? "nav-item-active" : "nav-item"
-                  }
-                >
-                  <span className="truncate">{list.name}</span>
-                  <span className="text-xs text-faint tabular-nums">
-                    {list._count.todos}
-                  </span>
-                </button>
-              </li>
-            ))}
-          </ul>
-
-          <form
-            className="space-y-2 pt-1"
-            onSubmit={(e) => {
-              e.preventDefault();
-              const name = newListName.trim();
-              if (!name) return;
-              createList.mutate({ name, isShared: true });
-            }}
-          >
-            <input
-              value={newListName}
-              onChange={(e) => setNewListName(e.target.value)}
-              placeholder="New shared list"
-              className="field"
-              aria-label="New shared list name"
-            />
-            <button
-              type="submit"
-              disabled={createList.isPending || !newListName.trim()}
-              className="btn-secondary w-full"
+            <form
+              className="flex gap-1.5 pt-1"
+              onSubmit={(e) => {
+                e.preventDefault();
+                const name = newPersonalName.trim();
+                if (!name) return;
+                createList.mutate({ name, isShared: false });
+              }}
             >
-              Create shared list
-            </button>
-          </form>
+              <input
+                value={newPersonalName}
+                onChange={(e) => setNewPersonalName(e.target.value)}
+                placeholder="New personal list"
+                className="field min-w-0 flex-1"
+                aria-label="New personal list name"
+              />
+              <button
+                type="submit"
+                disabled={createList.isPending || !newPersonalName.trim()}
+                className="btn-secondary h-9 w-9 shrink-0 px-0"
+                aria-label="Create personal list"
+              >
+                <IconPlus />
+              </button>
+            </form>
+          </nav>
+
+          <nav aria-label="Shared lists" className="space-y-1.5">
+            <p className="px-2.5 text-xs font-medium text-faint">Shared</p>
+            <ul className="flex gap-1 overflow-x-auto pb-0.5 lg:block lg:space-y-0.5 lg:overflow-visible lg:pb-0">
+              {shared.length === 0 && (
+                <li className="hidden px-2.5 py-1 text-xs text-faint lg:block">
+                  None yet — create one below.
+                </li>
+              )}
+              {shared.map((list) => (
+                <li key={list.id} className="min-w-max lg:min-w-0">
+                  <ListButton
+                    list={list}
+                    active={activeListId === list.id}
+                    onSelect={() => {
+                      setActiveListId(list.id);
+                      setInviteOpen(false);
+                      setEditingList(false);
+                    }}
+                  />
+                </li>
+              ))}
+            </ul>
+
+            <form
+              className="flex gap-1.5 pt-1"
+              onSubmit={(e) => {
+                e.preventDefault();
+                const name = newListName.trim();
+                if (!name) return;
+                createList.mutate({ name, isShared: true });
+              }}
+            >
+              <input
+                value={newListName}
+                onChange={(e) => setNewListName(e.target.value)}
+                placeholder="New shared list"
+                className="field min-w-0 flex-1"
+                aria-label="New shared list name"
+              />
+              <button
+                type="submit"
+                disabled={createList.isPending || !newListName.trim()}
+                className="btn-secondary h-9 w-9 shrink-0 px-0"
+                aria-label="Create shared list"
+              >
+                <IconPlus />
+              </button>
+            </form>
+          </nav>
           {createList.error && (
-            <p className="text-xs text-danger" role="alert">
+            <p className="px-2.5 text-xs text-danger" role="alert">
               {createList.error.message}
             </p>
           )}
-        </nav>
+        </div>
       </aside>
 
-      <section className="min-w-0 flex-1 space-y-4">
+      <section className="min-w-0 flex-1 px-4 py-6 sm:px-8">
         {active ? (
-          <>
-            <div className="flex flex-wrap items-center gap-2">
-              <h1 className="text-xl font-semibold tracking-tight text-ink">
-                {active.name}
-              </h1>
-              <span
-                className={active.isShared ? "chip-shared" : "chip-personal"}
-              >
-                {active.isShared ? "Shared" : "Personal"}
-              </span>
+          <div className="mx-auto max-w-2xl space-y-5">
+            <div className="flex flex-wrap items-end justify-between gap-3">
+              <div className="min-w-0 space-y-1">
+                <div className="flex flex-wrap items-center gap-2">
+                  {editingList && isOwner ? (
+                    <input
+                      autoFocus
+                      value={listNameDraft}
+                      onChange={(e) => setListNameDraft(e.target.value)}
+                      onBlur={() => {
+                        const name = listNameDraft.trim();
+                        if (!name || name === active.name) {
+                          setEditingList(false);
+                          return;
+                        }
+                        updateList.mutate({ id: active.id, name });
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          e.preventDefault();
+                          (e.currentTarget as HTMLInputElement).blur();
+                        }
+                        if (e.key === "Escape") setEditingList(false);
+                      }}
+                      className="field h-9 max-w-xs font-semibold"
+                      aria-label="List name"
+                    />
+                  ) : isOwner ? (
+                    <h1 className="min-w-0">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setListNameDraft(active.name);
+                          setEditingList(true);
+                        }}
+                        className="max-w-full truncate text-left text-xl font-semibold tracking-tight text-ink"
+                        title="Rename list"
+                      >
+                        {active.name}
+                      </button>
+                    </h1>
+                  ) : (
+                    <h1 className="text-xl font-semibold tracking-tight text-ink">
+                      {active.name}
+                    </h1>
+                  )}
+                  <span
+                    className={
+                      active.isShared ? "chip-shared" : "chip-personal"
+                    }
+                  >
+                    {active.isShared ? "Shared" : "Personal"}
+                  </span>
+                </div>
+                {active.isShared && (
+                  <p className="text-sm text-muted">
+                    {active.members
+                      .map((m) => m.user.name ?? m.user.email ?? "member")
+                      .join(" · ")}
+                  </p>
+                )}
+              </div>
+              {isOwner && (
+                <div className="flex items-center gap-1">
+                  <button
+                    type="button"
+                    onClick={() => setInviteOpen((open) => !open)}
+                    aria-expanded={inviteOpen}
+                    className="btn-ghost h-8 px-2.5 text-xs"
+                  >
+                    <IconPeople />
+                    {active.isShared ? "Invite" : "Share"}
+                  </button>
+                  <button
+                    type="button"
+                    className="btn-danger h-8 px-2.5 text-xs"
+                    disabled={deleteList.isPending}
+                    aria-label={`Delete list "${active.name}"`}
+                    onClick={() => {
+                      const count = active._count.todos;
+                      const extra =
+                        count > 0
+                          ? ` This removes ${count} item${count === 1 ? "" : "s"} too.`
+                          : "";
+                      if (
+                        confirm(`Delete "${active.name}"?${extra}`)
+                      ) {
+                        deleteList.mutate({ id: active.id });
+                      }
+                    }}
+                  >
+                    <IconTrash />
+                    Delete
+                  </button>
+                </div>
+              )}
             </div>
 
-            <InviteForm
-              listId={active.id}
-              members={active.members}
-              inviteEmail={inviteEmail}
-              setInviteEmail={setInviteEmail}
-              invite={invite}
-              error={invite.error?.message}
-            />
+            {(updateList.error ?? deleteList.error) && (
+              <p className="text-sm text-danger" role="alert">
+                {updateList.error?.message ?? deleteList.error?.message}
+              </p>
+            )}
+
+            {inviteOpen && (
+              <InviteForm
+                listId={active.id}
+                turnsShared={!active.isShared}
+                inviteEmail={inviteEmail}
+                setInviteEmail={setInviteEmail}
+                invite={invite}
+                error={invite.error?.message}
+              />
+            )}
 
             <TodoPanel listId={active.id} />
-          </>
-        ) : (
-          <div className="panel p-8 text-sm text-muted">
-            Select a list to get started.
           </div>
+        ) : (
+          <p className="text-sm text-muted">Select a list to get started.</p>
         )}
       </section>
     </div>
   );
 }
 
+function ListButton({
+  list,
+  active,
+  onSelect,
+}: {
+  list: ListItem;
+  active: boolean;
+  onSelect: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onSelect}
+      aria-current={active ? "true" : undefined}
+      className={active ? "nav-item-active" : "nav-item"}
+    >
+      <span className="flex min-w-0 items-center gap-2">
+        {list.isShared && (
+          <span className="size-1.5 shrink-0 rounded-full bg-accent" aria-hidden />
+        )}
+        <span className="truncate">{list.name}</span>
+      </span>
+      <span className="tabular-nums text-xs text-faint">
+        {list._count.todos}
+      </span>
+    </button>
+  );
+}
+
 function InviteForm({
   listId,
-  members,
+  turnsShared,
   inviteEmail,
   setInviteEmail,
   invite,
   error,
 }: {
   listId: string;
-  members: {
-    user: { id: string; name: string | null; email: string | null };
-  }[];
+  turnsShared?: boolean;
   inviteEmail: string;
   setInviteEmail: (v: string) => void;
   invite: {
@@ -182,45 +375,42 @@ function InviteForm({
   error?: string;
 }) {
   return (
-    <div className="panel space-y-3 p-4">
-      <p className="text-sm text-muted">
-        <span className="font-medium text-ink">Members · </span>
-        {members.map((m) => m.user.name ?? m.user.email ?? "user").join(", ")}
-      </p>
-      <form
-        className="flex flex-col gap-2 sm:flex-row"
-        onSubmit={(e) => {
-          e.preventDefault();
-          const email = inviteEmail.trim();
-          if (!email) return;
-          invite.mutate({ listId, email });
-        }}
-      >
+    <form
+      className="flex flex-col gap-2 sm:flex-row sm:items-start"
+      onSubmit={(e) => {
+        e.preventDefault();
+        const email = inviteEmail.trim();
+        if (!email) return;
+        invite.mutate({ listId, email });
+      }}
+    >
+      <div className="min-w-0 flex-1">
         <input
           type="email"
           value={inviteEmail}
           onChange={(e) => setInviteEmail(e.target.value)}
-          placeholder="Invite by email"
-          className="field flex-1"
+          placeholder="name@email.com"
+          className="field"
           aria-label="Invite email"
         />
-        <button
-          type="submit"
-          disabled={invite.isPending || !inviteEmail.trim()}
-          className="btn-secondary shrink-0"
-        >
-          Invite
-        </button>
-      </form>
-      {error && (
-        <p className="text-xs text-danger" role="alert">
-          {error}
+        <p className="mt-1 text-xs text-faint">
+          They must already have an account
+          {turnsShared ? " — this list then becomes shared." : "."}
         </p>
-      )}
-      <p className="text-xs text-faint">
-        They need an account in this app first.
-      </p>
-    </div>
+        {error && (
+          <p className="mt-1 text-xs text-danger" role="alert">
+            {error}
+          </p>
+        )}
+      </div>
+      <button
+        type="submit"
+        disabled={invite.isPending || !inviteEmail.trim()}
+        className="btn-secondary shrink-0"
+      >
+        {invite.isPending ? "Inviting…" : "Send invite"}
+      </button>
+    </form>
   );
 }
 
@@ -303,29 +493,6 @@ function TodoPanel({ listId }: { listId: string }) {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between gap-3">
-        <p className="text-xs text-faint">
-          Sync{" "}
-          <span
-            className={
-              realtimeStatus === "live"
-                ? "font-medium text-success"
-                : realtimeStatus === "error"
-                  ? "font-medium text-danger"
-                  : "text-muted"
-            }
-          >
-            {realtimeStatus === "live"
-              ? "live"
-              : realtimeStatus === "subscribing"
-                ? "connecting…"
-                : realtimeStatus === "error"
-                  ? "offline"
-                  : "idle"}
-          </span>
-        </p>
-      </div>
-
       <form
         onSubmit={(e) => {
           e.preventDefault();
@@ -339,7 +506,7 @@ function TodoPanel({ listId }: { listId: string }) {
           type="text"
           value={title}
           onChange={(e) => setTitle(e.target.value)}
-          placeholder="Add a todo…"
+          placeholder="Add something…"
           className="field flex-1"
           aria-label="New todo title"
         />
@@ -351,6 +518,29 @@ function TodoPanel({ listId }: { listId: string }) {
           {createTodo.isPending ? "Adding…" : "Add"}
         </button>
       </form>
+
+      <div
+        className="flex items-center gap-1.5 text-xs text-faint"
+        aria-live="polite"
+      >
+        <span
+          className={`size-1.5 rounded-full ${
+            realtimeStatus === "live"
+              ? "bg-success"
+              : realtimeStatus === "error"
+                ? "bg-danger"
+                : "bg-faint"
+          }`}
+          aria-hidden
+        />
+        {realtimeStatus === "live"
+          ? "Updates live"
+          : realtimeStatus === "subscribing"
+            ? "Connecting…"
+            : realtimeStatus === "error"
+              ? "Offline — refresh if changes stall"
+              : "Idle"}
+      </div>
 
       {(createTodo.error ??
         updateTodo.error ??
@@ -367,17 +557,20 @@ function TodoPanel({ listId }: { listId: string }) {
       )}
 
       {!todos.length ? (
-        <div className="panel px-5 py-10 text-center">
-          <p className="font-medium text-ink">No todos yet</p>
-          <p className="mt-1 text-sm text-muted">
-            Type above and press Add — this list updates live for members.
+        <div className="rounded-lg border border-dashed border-border px-5 py-12 text-center">
+          <p className="font-medium text-ink">This list is empty</p>
+          <p className="mx-auto mt-1 max-w-[28ch] text-sm text-muted">
+            Type above and add. Shared members see new items as they land.
           </p>
         </div>
       ) : (
-        <ul className="panel divide-y divide-border overflow-hidden">
+        <ul className="divide-y divide-border overflow-hidden rounded-lg border border-border bg-bg">
           {todos.map((todo) => (
-            <li key={todo.id} className="space-y-3 px-4 py-3 transition-colors duration-150 hover:bg-surface">
-              <div className="flex items-center gap-3">
+            <li
+              key={todo.id}
+              className="group px-4 py-3 transition-colors duration-150 ease-out hover:bg-surface"
+            >
+              <div className="flex items-start gap-3">
                 <input
                   type="checkbox"
                   checked={todo.completed}
@@ -388,104 +581,116 @@ function TodoPanel({ listId }: { listId: string }) {
                       completed: !todo.completed,
                     })
                   }
-                  className="size-4 rounded border-border text-primary accent-primary"
+                  className="check mt-0.5"
                   aria-label={`Mark "${todo.title}" complete`}
                 />
 
-                {editingId === todo.id ? (
-                  <input
-                    autoFocus
-                    value={editingTitle}
-                    onChange={(e) => setEditingTitle(e.target.value)}
-                    onBlur={() => {
-                      const trimmed = editingTitle.trim();
-                      if (trimmed)
-                        updateTodo.mutate({ id: todo.id, title: trimmed });
-                    }}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") {
-                        e.preventDefault();
+                <div className="min-w-0 flex-1 space-y-2">
+                  {editingId === todo.id ? (
+                    <input
+                      autoFocus
+                      value={editingTitle}
+                      onChange={(e) => setEditingTitle(e.target.value)}
+                      onBlur={() => {
                         const trimmed = editingTitle.trim();
                         if (trimmed)
                           updateTodo.mutate({ id: todo.id, title: trimmed });
-                      }
-                      if (e.key === "Escape") setEditingId(null);
-                    }}
-                    className="field flex-1 py-1.5"
-                  />
-                ) : (
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          e.preventDefault();
+                          const trimmed = editingTitle.trim();
+                          if (trimmed)
+                            updateTodo.mutate({ id: todo.id, title: trimmed });
+                        }
+                        if (e.key === "Escape") setEditingId(null);
+                      }}
+                      className="field h-8"
+                    />
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setEditingId(todo.id);
+                        setEditingTitle(todo.title);
+                      }}
+                      className={`w-full text-left text-sm transition-opacity duration-150 ease-out ${
+                        todo.completed
+                          ? "text-faint line-through"
+                          : "text-ink"
+                      }`}
+                    >
+                      {todo.title}
+                    </button>
+                  )}
+
+                  {(todo.imageUrl || uploadingId === todo.id) && (
+                    <div className="flex items-center gap-2">
+                      {todo.imageUrl ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          src={todo.imageUrl}
+                          alt=""
+                          className="h-14 w-14 rounded-md border border-border object-cover"
+                        />
+                      ) : null}
+                      {uploadingId === todo.id && (
+                        <p className="text-xs text-faint">Uploading…</p>
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                <div className="flex shrink-0 items-center gap-0.5 opacity-100 sm:opacity-0 sm:transition-opacity sm:duration-150 sm:group-hover:opacity-100 sm:focus-within:opacity-100">
+                  <label className="btn-ghost h-10 w-10 cursor-pointer px-0 sm:h-8 sm:w-8">
+                    <span className="sr-only">
+                      {uploadingId === todo.id
+                        ? "Uploading image"
+                        : todo.imageUrl
+                          ? "Replace image"
+                          : "Add image"}
+                    </span>
+                    <IconImage />
+                    <input
+                      type="file"
+                      accept="image/jpeg,image/png,image/webp,image/gif"
+                      className="hidden"
+                      disabled={uploadingId === todo.id}
+                      onChange={(e) => {
+                        void onPickImage(todo.id, e.target.files?.[0]);
+                        e.target.value = "";
+                      }}
+                    />
+                  </label>
+                  {todo.imageUrl && (
+                    <button
+                      type="button"
+                      className="btn-ghost h-10 w-10 px-0 sm:h-8 sm:w-8"
+                      disabled={removeImage.isPending}
+                      aria-label="Remove image"
+                      onClick={() => {
+                        if (confirm("Remove this image?")) {
+                          removeImage.mutate({ id: todo.id });
+                        }
+                      }}
+                    >
+                      <IconClose />
+                    </button>
+                  )}
                   <button
                     type="button"
+                    className="btn-danger h-10 w-10 px-0 sm:h-8 sm:w-8"
+                    disabled={deleteTodo.isPending}
+                    aria-label={`Delete "${todo.title}"`}
                     onClick={() => {
-                      setEditingId(todo.id);
-                      setEditingTitle(todo.title);
-                    }}
-                    className={`min-w-0 flex-1 text-left text-sm ${
-                      todo.completed
-                        ? "text-faint line-through"
-                        : "text-ink"
-                    }`}
-                  >
-                    {todo.title}
-                  </button>
-                )}
-
-                <button
-                  type="button"
-                  disabled={deleteTodo.isPending}
-                  onClick={() => {
-                    if (confirm(`Delete "${todo.title}"?`)) {
-                      deleteTodo.mutate({ id: todo.id });
-                    }
-                  }}
-                  className="btn-danger shrink-0 px-2 py-1 text-xs"
-                >
-                  Delete
-                </button>
-              </div>
-
-              <div className="flex items-center gap-3 pl-7">
-                {todo.imageUrl ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img
-                    src={todo.imageUrl}
-                    alt=""
-                    className="h-12 w-12 rounded-md border border-border object-cover"
-                  />
-                ) : null}
-
-                <label className="cursor-pointer text-xs font-medium text-primary hover:underline">
-                  {uploadingId === todo.id
-                    ? "Uploading…"
-                    : todo.imageUrl
-                      ? "Replace image"
-                      : "Add image"}
-                  <input
-                    type="file"
-                    accept="image/jpeg,image/png,image/webp,image/gif"
-                    className="hidden"
-                    disabled={uploadingId === todo.id}
-                    onChange={(e) => {
-                      void onPickImage(todo.id, e.target.files?.[0]);
-                      e.target.value = "";
-                    }}
-                  />
-                </label>
-
-                {todo.imageUrl && (
-                  <button
-                    type="button"
-                    disabled={removeImage.isPending}
-                    onClick={() => {
-                      if (confirm("Remove this image?")) {
-                        removeImage.mutate({ id: todo.id });
+                      if (confirm(`Delete "${todo.title}"?`)) {
+                        deleteTodo.mutate({ id: todo.id });
                       }
                     }}
-                    className="btn-danger px-0 py-0 text-xs"
                   >
-                    Remove
+                    <IconTrash />
                   </button>
-                )}
+                </div>
               </div>
             </li>
           ))}

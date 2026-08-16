@@ -17,15 +17,11 @@ import {
   requireListMember,
   requireTodoViaMembership,
   storagePathFromPublicUrl,
+  isImageUrlForTodo,
+  removeStorageObject,
 } from "~/server/lib/ensure-personal-list";
 import { createTRPCRouter, protectedProcedure } from "~/server/api/trpc";
 
-async function removeStorageObject(imageUrl: string) {
-  const path = storagePathFromPublicUrl(imageUrl, TODO_IMAGES_BUCKET);
-  if (!path) return;
-  const supabase = createSupabaseBrowserClient();
-  await supabase.storage.from(TODO_IMAGES_BUCKET).remove([path]);
-}
 export const todoRouter = createTRPCRouter({
   /** S1/A2 — todos for one list I belong to */
   getByList: protectedProcedure
@@ -44,7 +40,7 @@ export const todoRouter = createTRPCRouter({
     .input(
       z.object({
         listId: z.string().min(1),
-        title: z.string().trim().min(1, "Title is required"),
+        title: z.string().trim().min(1, "Title is required").max(200),
       }),
     )
     .mutation(async ({ ctx, input }) => {
@@ -64,7 +60,7 @@ export const todoRouter = createTRPCRouter({
     .input(
       z.object({
         id: z.string().min(1),
-        title: z.string().trim().min(1).optional(),
+        title: z.string().trim().min(1).max(200).optional(),
         completed: z.boolean().optional(),
       }),
     )
@@ -110,6 +106,13 @@ export const todoRouter = createTRPCRouter({
     )
     .mutation(async ({ ctx, input }) => {
       await requireTodoViaMembership(ctx.db, input.id, ctx.session.user.id);
+
+      if (!isImageUrlForTodo(input.imageUrl, TODO_IMAGES_BUCKET, input.id)) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "Image URL is not a valid upload for this todo",
+        });
+      }
 
       return ctx.db.todo.update({
         where: { id: input.id },

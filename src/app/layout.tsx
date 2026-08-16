@@ -7,9 +7,8 @@ import { Providers } from "~/app/_components/providers";
 import { TRPCReactProvider } from "~/trpc/react";
 
 export const metadata: Metadata = {
-  title: "T3 Todo",
-  description: "Personal and shared lists — learn the T3 stack by building",
-  icons: [{ rel: "icon", url: "/favicon.ico" }],
+  title: "Lists",
+  description: "Personal and shared lists that stay out of the way.",
 };
 
 const geist = Geist({
@@ -23,7 +22,6 @@ export default function RootLayout({
   return (
     <html lang="en" className={`${geist.variable}`}>
       <body>
-        {/* SessionProvider (Auth) wraps tRPC so client forms can call signIn() */}
         <Providers>
           <TRPCReactProvider>{children}</TRPCReactProvider>
         </Providers>

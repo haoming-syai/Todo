@@ -9,14 +9,16 @@ import { z } from "zod";
 
 import {
   ensurePersonalList,
+  removeStorageObject,
   requireListMember,
+  requireListOwner,
 } from "~/server/lib/ensure-personal-list";
 import { createTRPCRouter, protectedProcedure } from "~/server/api/trpc";
 
 export const listRouter = createTRPCRouter({
   /**
    * Lists I belong to (personal + shared).
-   * Also ensures a personal "My Todos" list exists (covers Google sign-in).
+   * First-run: creates a personal "My Todos" list if the user has none at all.
    */
   getMine: protectedProcedure.query(async ({ ctx }) => {
     await ensurePersonalList(ctx.db, ctx.session.user.id);
@@ -43,7 +45,7 @@ export const listRouter = createTRPCRouter({
   create: protectedProcedure
     .input(
       z.object({
-        name: z.string().trim().min(1),
+        name: z.string().trim().min(1).max(80),
         isShared: z.boolean().default(true),
       }),
     )
@@ -61,6 +63,46 @@ export const listRouter = createTRPCRouter({
     }),
 
   /**
+   * Rename a list (owner only).
+   */
+  update: protectedProcedure
+    .input(
+      z.object({
+        id: z.string().min(1),
+        name: z.string().trim().min(1).max(80),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      await requireListOwner(ctx.db, input.id, ctx.session.user.id);
+      return ctx.db.todoList.update({
+        where: { id: input.id },
+        data: { name: input.name },
+      });
+    }),
+
+  /**
+   * Delete a list and its todos (owner only).
+   */
+  delete: protectedProcedure
+    .input(z.object({ id: z.string().min(1) }))
+    .mutation(async ({ ctx, input }) => {
+      await requireListOwner(ctx.db, input.id, ctx.session.user.id);
+
+      const images = await ctx.db.todo.findMany({
+        where: { listId: input.id, NOT: { imageUrl: null } },
+        select: { imageUrl: true },
+      });
+      await Promise.all(
+        images.map((todo) =>
+          todo.imageUrl ? removeStorageObject(todo.imageUrl) : Promise.resolve(),
+        ),
+      );
+
+      await ctx.db.todoList.delete({ where: { id: input.id } });
+      return { ok: true as const };
+    }),
+
+  /**
    * Invite by email (owner only). Forces isShared=true.
    */
   invite: protectedProcedure
@@ -71,18 +113,10 @@ export const listRouter = createTRPCRouter({
       }),
     )
     .mutation(async ({ ctx, input }) => {
-      const list = await ctx.db.todoList.findFirst({
-        where: { id: input.listId, ownerId: ctx.session.user.id },
-      });
-      if (!list) {
-        throw new TRPCError({
-          code: "FORBIDDEN",
-          message: "Only the list owner can invite",
-        });
-      }
+      await requireListOwner(ctx.db, input.listId, ctx.session.user.id);
 
-      const invitee = await ctx.db.user.findUnique({
-        where: { email: input.email },
+      const invitee = await ctx.db.user.findFirst({
+        where: { email: { equals: input.email, mode: "insensitive" } },
       });
       if (!invitee) {
         throw new TRPCError({
@@ -98,19 +132,20 @@ export const listRouter = createTRPCRouter({
         });
       }
 
-      await ctx.db.todoList.update({
-        where: { id: list.id },
-        data: { isShared: true },
-      });
-
       try {
-        await ctx.db.todoListMember.create({
-          data: {
-            listId: list.id,
-            userId: invitee.id,
-            role: "MEMBER",
-          },
-        });
+        await ctx.db.$transaction([
+          ctx.db.todoList.update({
+            where: { id: input.listId },
+            data: { isShared: true },
+          }),
+          ctx.db.todoListMember.create({
+            data: {
+              listId: input.listId,
+              userId: invitee.id,
+              role: "MEMBER",
+            },
+          }),
+        ]);
       } catch {
         throw new TRPCError({
           code: "CONFLICT",

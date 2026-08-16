@@ -1,37 +1,32 @@
 @import "tailwindcss";
 
 /*
-  DESIGN TOKENS — T3 Todo (product register)
-  Mood: quiet desk under a cool lamp — Linear/Notion density, tool disappears into the task.
-  Strategy: Restrained — pure white surface, indigo primary ≤10%, teal accent for shared/live.
-  Seed hue ~268° kept as deep primary (not purple-on-white SaaS).
+  Lists — quiet desk tool. Cool lamp, white paper, indigo only on action.
+  Restrained strategy. Second layer (--color-rail) for the list sidebar.
 */
 
 @theme {
   --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
 
   --color-bg: oklch(1 0 0);
+  --color-rail: oklch(0.972 0.008 268);
   --color-surface: oklch(0.975 0.006 268);
-  --color-panel: oklch(0.955 0.01 268);
+  --color-panel: oklch(0.95 0.012 268);
   --color-ink: oklch(0.24 0.025 268);
-  --color-muted: oklch(0.48 0.02 268);
-  --color-faint: oklch(0.62 0.015 268);
+  --color-muted: oklch(0.46 0.022 268);
+  --color-faint: oklch(0.58 0.016 268);
   --color-border: oklch(0.9 0.012 268);
   --color-primary: oklch(0.42 0.15 268);
   --color-primary-hover: oklch(0.36 0.15 268);
-  --color-accent: oklch(0.52 0.11 195);
+  --color-accent: oklch(0.48 0.1 195);
   --color-accent-soft: oklch(0.94 0.03 195);
-  --color-danger: oklch(0.52 0.18 25);
+  --color-danger: oklch(0.5 0.17 25);
   --color-danger-soft: oklch(0.96 0.02 25);
-  --color-success: oklch(0.52 0.12 155);
+  --color-success: oklch(0.5 0.11 155);
   --color-on-primary: oklch(1 0 0);
 
-  --radius-sm: 0.375rem;
-  --radius-md: 0.5rem;
-  --radius-lg: 0.75rem;
-
   --shadow-soft: 0 1px 2px oklch(0.24 0.025 268 / 0.06),
-    0 4px 12px oklch(0.24 0.025 268 / 0.04);
+    0 8px 24px oklch(0.24 0.025 268 / 0.05);
 }
 
 @layer base {
@@ -41,6 +36,7 @@
 
   body {
     @apply min-h-dvh bg-bg font-sans text-ink antialiased;
+    caret-color: oklch(0.42 0.15 268);
   }
 
   ::selection {
@@ -49,6 +45,31 @@
 
   :focus-visible {
     @apply outline-2 outline-offset-2 outline-primary;
+  }
+
+  a {
+    text-underline-offset: 0.18em;
+  }
+
+  input,
+  textarea {
+    caret-color: oklch(0.42 0.15 268);
+  }
+
+  * {
+    scrollbar-color: oklch(0.78 0.02 268) transparent;
+  }
+
+  *::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+
+  *::-webkit-scrollbar-thumb {
+    background: oklch(0.78 0.02 268);
+    border-radius: 99px;
+    border: 2px solid transparent;
+    background-clip: padding-box;
   }
 
   @media (prefers-reduced-motion: reduce) {
@@ -64,23 +85,23 @@
 
 @layer components {
   .btn-primary {
-    @apply inline-flex items-center justify-center gap-2 rounded-md bg-primary px-3.5 py-2 text-sm font-medium text-on-primary transition-[background-color,opacity,box-shadow] duration-150 ease-out hover:bg-primary-hover disabled:cursor-not-allowed disabled:opacity-45;
+    @apply inline-flex h-9 items-center justify-center gap-2 rounded-md bg-primary px-3.5 text-sm font-medium text-on-primary transition-[background-color,opacity] duration-150 ease-out hover:bg-primary-hover disabled:cursor-not-allowed disabled:opacity-45;
   }
 
   .btn-secondary {
-    @apply inline-flex items-center justify-center gap-2 rounded-md border border-border bg-bg px-3.5 py-2 text-sm font-medium text-ink transition-[background-color,opacity,box-shadow] duration-150 ease-out hover:bg-surface disabled:cursor-not-allowed disabled:opacity-45;
+    @apply inline-flex h-9 items-center justify-center gap-2 rounded-md border border-border bg-bg px-3.5 text-sm font-medium text-ink transition-[background-color,opacity] duration-150 ease-out hover:bg-surface disabled:cursor-not-allowed disabled:opacity-45;
   }
 
   .btn-ghost {
-    @apply inline-flex items-center justify-center gap-2 rounded-md px-3.5 py-2 text-sm font-medium text-muted transition-[background-color,opacity,box-shadow] duration-150 ease-out hover:bg-surface hover:text-ink disabled:cursor-not-allowed disabled:opacity-45;
+    @apply inline-flex h-9 items-center justify-center gap-2 rounded-md px-3 text-sm font-medium text-muted transition-[background-color,color] duration-150 ease-out hover:bg-panel hover:text-ink disabled:cursor-not-allowed disabled:opacity-45;
   }
 
   .btn-danger {
-    @apply inline-flex items-center justify-center gap-2 rounded-md px-3.5 py-2 text-sm font-medium text-danger transition-[background-color,opacity,box-shadow] duration-150 ease-out hover:bg-danger-soft disabled:cursor-not-allowed disabled:opacity-45;
+    @apply inline-flex h-8 items-center justify-center gap-1.5 rounded-md px-2 text-sm font-medium text-danger transition-[background-color,opacity] duration-150 ease-out hover:bg-danger-soft disabled:cursor-not-allowed disabled:opacity-45;
   }
 
   .field {
-    @apply w-full rounded-md border border-border bg-bg px-3 py-2 text-sm text-ink placeholder:text-faint transition-[border-color,box-shadow] duration-150 ease-out focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20;
+    @apply h-9 w-full rounded-md border border-border bg-bg px-3 text-sm text-ink placeholder:text-faint transition-[border-color,box-shadow] duration-150 ease-out focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20;
   }
 
   .label {
@@ -89,10 +110,6 @@
 
   .panel {
     @apply rounded-lg border border-border bg-bg shadow-soft;
-  }
-
-  .chip {
-    @apply inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium;
   }
 
   .chip-personal {
@@ -104,10 +121,19 @@
   }
 
   .nav-item {
-    @apply flex w-full items-center justify-between gap-2 rounded-md px-2.5 py-2 text-left text-sm text-ink transition-colors duration-150 ease-out hover:bg-panel;
+    @apply relative flex w-full items-center justify-between gap-2 rounded-md px-2.5 py-1.5 text-left text-sm text-ink transition-colors duration-150 ease-out hover:bg-panel max-lg:w-auto max-lg:rounded-full max-lg:border max-lg:border-border max-lg:bg-bg;
   }
 
   .nav-item-active {
-    @apply flex w-full items-center justify-between gap-2 rounded-md bg-panel px-2.5 py-2 text-left text-sm font-medium text-primary transition-colors duration-150 ease-out;
+    @apply relative flex w-full items-center justify-between gap-2 rounded-md bg-bg px-2.5 py-1.5 text-left text-sm font-medium text-ink shadow-soft max-lg:w-auto max-lg:rounded-full max-lg:border max-lg:border-primary/20;
+  }
+
+  .check {
+    @apply size-4 shrink-0 cursor-pointer appearance-none rounded-[0.28rem] border border-border bg-bg bg-center bg-no-repeat transition-[background-color,border-color] duration-150 ease-out checked:border-primary checked:bg-primary disabled:cursor-not-allowed disabled:opacity-45;
+  }
+
+  .check:checked {
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12' fill='none'%3E%3Cpath d='M2.4 6.2 4.8 8.6 9.6 3.4' stroke='white' stroke-width='1.7' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+    background-size: 12px 12px;
   }
 }

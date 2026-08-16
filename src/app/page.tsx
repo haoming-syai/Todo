@@ -1,68 +1,75 @@
 /**
  * ============================================================================
- * [ROUTE / VIEW] — App Router page for `/`
+ * [ROUTE / VIEW] — `/`
  * ============================================================================
  */
 
 import Link from "next/link";
-import { Suspense } from "react";
 
-import { TodoApp } from "~/app/_components/todo-app";
+import { BrandLockup } from "~/app/_components/brand";
+import { TodoAppLoader } from "~/app/_components/todo-app-loader";
 import { auth } from "~/server/auth";
-import { api, HydrateClient } from "~/trpc/server";
+import { api, caller, HydrateClient } from "~/trpc/server";
+
+function initials(name?: string | null, email?: string | null) {
+  const source = name?.trim() || email?.split("@")[0] || "?";
+  const parts = source.split(/\s+/).filter(Boolean);
+  if (parts.length >= 2) {
+    return `${parts[0]![0]!}${parts[1]![0]!}`.toUpperCase();
+  }
+  return source.slice(0, 2).toUpperCase();
+}
 
 export default async function Home() {
   const session = await auth();
   const user = session?.user?.id ? session.user : null;
 
   if (user) {
-    void api.list.getMine.prefetch();
+    // Await so HydrateClient has data. Client-component SSR cannot call
+    // /api/trpc with cookies, so missing prefetches show up as UNAUTHORIZED.
+    await api.list.getMine.prefetch();
+    const lists = await caller.list.getMine();
+    await Promise.all(
+      lists.map((list) => api.todo.getByList.prefetch({ listId: list.id })),
+    );
   }
 
   return (
     <HydrateClient>
       {user ? (
         <div className="flex min-h-dvh flex-col">
-          <header className="sticky top-0 z-10 border-b border-border bg-bg/90 backdrop-blur-sm">
-            <div className="mx-auto flex h-14 max-w-6xl items-center justify-between gap-4 px-4">
-              <Link href="/" className="text-sm font-semibold tracking-tight text-ink">
-                T3 Todo
-              </Link>
-              <div className="flex items-center gap-3">
-                <span className="hidden max-w-[14rem] truncate text-sm text-muted sm:inline">
-                  {user.name ?? user.email}
+          <header className="sticky top-0 z-20 border-b border-border bg-bg">
+            <div className="flex h-14 items-center justify-between gap-4 px-4 lg:px-5">
+              <BrandLockup />
+              <div className="flex items-center gap-2">
+                <span
+                  className="hidden size-7 items-center justify-center rounded-full bg-panel text-[11px] font-medium text-ink sm:inline-flex"
+                  title={user.name ?? user.email ?? undefined}
+                >
+                  {initials(user.name, user.email)}
                 </span>
-                <Link href="/api/auth/signout" className="btn-ghost">
+                <Link href="/api/auth/signout" className="btn-ghost h-8 px-2.5">
                   Sign out
                 </Link>
               </div>
             </div>
           </header>
 
-          <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-6">
-            <Suspense
-              fallback={
-                <div className="space-y-3" aria-busy="true">
-                  <div className="h-8 w-40 animate-pulse rounded-md bg-panel" />
-                  <div className="h-48 animate-pulse rounded-lg bg-panel" />
-                </div>
-              }
-            >
-              <TodoApp />
-            </Suspense>
-          </main>
+          <div className="flex min-h-0 flex-1">
+            <TodoAppLoader />
+          </div>
         </div>
       ) : (
         <main className="flex min-h-dvh flex-col items-center justify-center px-4">
-          <div className="w-full max-w-md space-y-8 text-center">
-            <div className="space-y-3">
-              <p className="text-sm font-medium text-primary">T3 Todo</p>
-              <h1 className="text-balance text-3xl font-semibold tracking-tight text-ink sm:text-4xl">
-                Lists that stay out of the way
+          <div className="w-full max-w-md space-y-8">
+            <div className="space-y-4 text-center">
+              <BrandLockup />
+              <h1 className="text-balance text-3xl font-semibold tracking-tight text-ink">
+                What needs doing, together or alone.
               </h1>
               <p className="text-pretty text-muted">
-                Personal and shared todos with Google or email sign-in. Built to
-                learn the T3 stack by reading the code.
+                Keep a personal list, then invite people by email when a task
+                belongs to more than one person.
               </p>
             </div>
             <div className="flex flex-wrap items-center justify-center gap-3">

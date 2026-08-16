@@ -10,6 +10,8 @@ import Link from "next/link";
 import { signIn } from "next-auth/react";
 import { useState } from "react";
 
+import { IconGoogle } from "~/app/_components/icons";
+
 export function LoginForm() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -79,9 +81,10 @@ export function LoginForm() {
         </button>
       </form>
 
-      <div className="relative text-center text-xs text-faint">
-        <span className="relative z-10 bg-bg px-2">or</span>
-        <span className="absolute inset-x-0 top-1/2 h-px -translate-y-1/2 bg-border" />
+      <div className="flex items-center gap-3 text-xs text-faint">
+        <span className="h-px flex-1 bg-border" />
+        or
+        <span className="h-px flex-1 bg-border" />
       </div>
 
       <button
@@ -89,13 +92,14 @@ export function LoginForm() {
         onClick={() => signIn("google", { callbackUrl: "/" })}
         className="btn-secondary w-full"
       >
+        <IconGoogle />
         Continue with Google
       </button>
 
       <p className="text-center text-sm text-muted">
         No account?{" "}
         <Link href="/register" className="font-medium text-primary hover:underline">
-          Register
+          Create account
         </Link>
       </p>
     </div>

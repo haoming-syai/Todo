@@ -24,8 +24,10 @@ export const authRouter = createTRPCRouter({
       }),
     )
     .mutation(async ({ ctx, input }) => {
-      const existing = await ctx.db.user.findUnique({
-        where: { email: input.email },
+      const email = input.email.trim().toLowerCase();
+
+      const existing = await ctx.db.user.findFirst({
+        where: { email: { equals: email, mode: "insensitive" } },
       });
 
       if (existing) {
@@ -42,7 +44,7 @@ export const authRouter = createTRPCRouter({
         const user = await tx.user.create({
           data: {
             name: input.name,
-            email: input.email,
+            email,
             passwordHash,
           },
         });

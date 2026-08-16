@@ -67,8 +67,10 @@ export const authConfig = {
 
         if (!parsed.success) return null;
 
-        const user = await db.user.findUnique({
-          where: { email: parsed.data.email },
+        const email = parsed.data.email.trim().toLowerCase();
+
+        const user = await db.user.findFirst({
+          where: { email: { equals: email, mode: "insensitive" } },
         });
 
         // No user, or Google-only user without a password → reject

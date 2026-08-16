@@ -8,10 +8,17 @@
 
 import { TRPCError } from "@trpc/server";
 import type { PrismaClient } from "../../../generated/prisma";
+import {
+  createSupabaseBrowserClient,
+  TODO_IMAGES_BUCKET,
+} from "~/lib/supabase/client";
 
 type Db = PrismaClient;
 
-/** Create "My Todos" personal list if the user does not have one yet. */
+/**
+ * First-run only: if the user belongs to no lists yet, create "My Todos".
+ * Does not recreate a personal list after the owner deletes it.
+ */
 export async function ensurePersonalList(db: Db, userId: string) {
   // After `db push --force-reset`, an old JWT can still hold a deleted user id.
   // Creating a list for a missing user → TodoList_ownerId_fkey violation.
@@ -26,10 +33,11 @@ export async function ensurePersonalList(db: Db, userId: string) {
     });
   }
 
-  const existing = await db.todoList.findFirst({
-    where: { ownerId: userId, isShared: false },
+  const membership = await db.todoListMember.findFirst({
+    where: { userId },
+    select: { id: true },
   });
-  if (existing) return existing;
+  if (membership) return null;
 
   return db.todoList.create({
     data: {
@@ -41,6 +49,20 @@ export async function ensurePersonalList(db: Db, userId: string) {
       },
     },
   });
+}
+
+/** Throw unless the caller owns the list. */
+export async function requireListOwner(db: Db, listId: string, userId: string) {
+  const list = await db.todoList.findFirst({
+    where: { id: listId, ownerId: userId },
+  });
+  if (!list) {
+    throw new TRPCError({
+      code: "FORBIDDEN",
+      message: "Only the list owner can do that",
+    });
+  }
+  return list;
 }
 
 /** Throw if the user is not a member of the list. */
@@ -82,10 +104,47 @@ export async function requireTodoViaMembership(
   return todo;
 }
 
-/** Extract Storage object path from a public URL. */
+/** Extract Storage object path from a public URL. Rejects traversal. */
 export function storagePathFromPublicUrl(imageUrl: string, bucket: string) {
   const marker = `/object/public/${bucket}/`;
   const idx = imageUrl.indexOf(marker);
   if (idx === -1) return null;
-  return decodeURIComponent(imageUrl.slice(idx + marker.length));
+
+  let path: string;
+  try {
+    const raw = imageUrl.slice(idx + marker.length).split("?")[0] ?? "";
+    path = decodeURIComponent(raw);
+  } catch {
+    return null;
+  }
+
+  if (
+    !path ||
+    path.includes("..") ||
+    path.includes("\\") ||
+    path.startsWith("/")
+  ) {
+    return null;
+  }
+
+  return path;
+}
+
+/** Uploads live at `{userId}/{todoId}/{file}` — reject anything else. */
+export function isImageUrlForTodo(
+  imageUrl: string,
+  bucket: string,
+  todoId: string,
+) {
+  const path = storagePathFromPublicUrl(imageUrl, bucket);
+  if (!path) return false;
+  const parts = path.split("/");
+  return parts.length === 3 && parts[1] === todoId && Boolean(parts[0] && parts[2]);
+}
+
+export async function removeStorageObject(imageUrl: string) {
+  const path = storagePathFromPublicUrl(imageUrl, TODO_IMAGES_BUCKET);
+  if (!path) return;
+  const supabase = createSupabaseBrowserClient();
+  await supabase.storage.from(TODO_IMAGES_BUCKET).remove([path]);
 }
