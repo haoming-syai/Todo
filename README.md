@@ -1,29 +1,51 @@
-# Create T3 App
+# Lists
 
-This is a [T3 Stack](https://create.t3.gg/) project bootstrapped with `create-t3-app`.
+A Next.js todo app with personal/shared lists, Auth.js authentication, Prisma,
+and Neon PostgreSQL.
 
-## What's next? How do I make an app with this?
+## Authentication and security
 
-We try to keep this project as simple as possible, so you can start with just the scaffolding we set up for you, and add additional things later when they become necessary.
+- Email/password registration with mandatory email verification
+- One-hour, single-use password-reset links
+- Google OAuth through Auth.js
+- Five-attempt account lockout for 15 minutes
+- Neon-backed per-route, per-user, per-email, and per-IP rate limits
+- Auth.js CSRF handling plus same-origin checks for custom mutations
+- JWT session-version invalidation after password resets
+- Authenticated image storage in Neon and 10-second list polling
 
-If you are not familiar with the different technologies used in this project, please refer to the respective docs. If you still are in the wind, please join our [Discord](https://t3.gg/discord) and ask for help.
+## Local setup
 
-- [Next.js](https://nextjs.org)
-- [NextAuth.js](https://next-auth.js.org)
-- [Prisma](https://prisma.io)
-- [Drizzle](https://orm.drizzle.team)
-- [Tailwind CSS](https://tailwindcss.com)
-- [tRPC](https://trpc.io)
+1. Link the repository to the intended Neon project and branch. The checked-in
+   `neon.ts` uses Neon for PostgreSQL only; Auth.js remains the auth provider.
+2. Copy `.env.example` to `.env.local` and fill in the server-only values, or
+   run `npm run dev:neon` to inject the linked Neon connection values from the
+   Neon CLI.
+3. Apply database migrations with `npm run db:migrate`. When relying on the
+   CLI-injected connection, run:
 
-## Learn More
+   ```powershell
+   neon-env run -- node node_modules/prisma/build/index.js migrate deploy
+   ```
 
-To learn more about the [T3 Stack](https://create.t3.gg/), take a look at the following resources:
+4. Start the app with `npm run dev` or `npm run dev:neon`.
 
-- [Documentation](https://create.t3.gg/)
-- [Learn the T3 Stack](https://create.t3.gg/en/faq#what-learning-resources-are-currently-available) — Check out these awesome tutorials
+During development only, verification/reset URLs are written to the server
+console when SMTP is not configured. Production never logs these URLs and
+requires working SMTP configuration.
 
-You can check out the [create-t3-app GitHub repository](https://github.com/t3-oss/create-t3-app) — your feedback and contributions are welcome!
+## OAuth callbacks
 
-## How do I deploy this?
+Configure both the local and deployed origins with the providers:
 
-Follow our deployment guides for [Vercel](https://create.t3.gg/en/deployment/vercel), [Netlify](https://create.t3.gg/en/deployment/netlify) and [Docker](https://create.t3.gg/en/deployment/docker) for more information.
+- Google: `/api/auth/callback/google`
+
+For example, the local callback is
+`http://localhost:3000/api/auth/callback/google`.
+
+## Commands
+
+- `npm run check` — ESLint plus TypeScript
+- `npm run build` — production Turbopack build
+- `npm run db:migrate` — apply committed Prisma migrations
+- `npm run db:studio` — inspect the database with Prisma Studio

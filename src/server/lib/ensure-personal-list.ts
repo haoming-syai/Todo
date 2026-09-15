@@ -8,10 +8,6 @@
 
 import { TRPCError } from "@trpc/server";
 import type { PrismaClient } from "../../../generated/prisma";
-import {
-  createSupabaseBrowserClient,
-  TODO_IMAGES_BUCKET,
-} from "~/lib/supabase/client";
 
 type Db = PrismaClient;
 
@@ -29,7 +25,8 @@ export async function ensurePersonalList(db: Db, userId: string) {
   if (!user) {
     throw new TRPCError({
       code: "UNAUTHORIZED",
-      message: "Your session is stale (DB was reset). Sign out and sign in again.",
+      message:
+        "Your session is stale (DB was reset). Sign out and sign in again.",
     });
   }
 
@@ -66,7 +63,11 @@ export async function requireListOwner(db: Db, listId: string, userId: string) {
 }
 
 /** Throw if the user is not a member of the list. */
-export async function requireListMember(db: Db, listId: string, userId: string) {
+export async function requireListMember(
+  db: Db,
+  listId: string,
+  userId: string,
+) {
   const member = await db.todoListMember.findUnique({
     where: { listId_userId: { listId, userId } },
   });
@@ -102,49 +103,4 @@ export async function requireTodoViaMembership(
   }
 
   return todo;
-}
-
-/** Extract Storage object path from a public URL. Rejects traversal. */
-export function storagePathFromPublicUrl(imageUrl: string, bucket: string) {
-  const marker = `/object/public/${bucket}/`;
-  const idx = imageUrl.indexOf(marker);
-  if (idx === -1) return null;
-
-  let path: string;
-  try {
-    const raw = imageUrl.slice(idx + marker.length).split("?")[0] ?? "";
-    path = decodeURIComponent(raw);
-  } catch {
-    return null;
-  }
-
-  if (
-    !path ||
-    path.includes("..") ||
-    path.includes("\\") ||
-    path.startsWith("/")
-  ) {
-    return null;
-  }
-
-  return path;
-}
-
-/** Uploads live at `{userId}/{todoId}/{file}` — reject anything else. */
-export function isImageUrlForTodo(
-  imageUrl: string,
-  bucket: string,
-  todoId: string,
-) {
-  const path = storagePathFromPublicUrl(imageUrl, bucket);
-  if (!path) return false;
-  const parts = path.split("/");
-  return parts.length === 3 && parts[1] === todoId && Boolean(parts[0] && parts[2]);
-}
-
-export async function removeStorageObject(imageUrl: string) {
-  const path = storagePathFromPublicUrl(imageUrl, TODO_IMAGES_BUCKET);
-  if (!path) return;
-  const supabase = createSupabaseBrowserClient();
-  await supabase.storage.from(TODO_IMAGES_BUCKET).remove([path]);
 }

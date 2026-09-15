@@ -2,18 +2,16 @@
  * ============================================================================
  * [ROUTE] — POST /api/todo/upload
  * ============================================================================
- * Uses the anon key against a public bucket (no service role).
- * Auth.js + list membership still gate WHO may upload.
+ * Stores one image per todo in Neon Postgres. Auth.js + list membership gate
+ * both writes and reads.
  */
 
 import { NextResponse } from "next/server";
 
-import {
-  createSupabaseBrowserClient,
-  TODO_IMAGES_BUCKET,
-} from "~/lib/supabase/client";
 import { auth } from "~/server/auth";
 import { db } from "~/server/db";
+import { getClientIp, isSameOriginRequest } from "~/server/security/request";
+import { checkRateLimit } from "~/server/security/rate-limit";
 
 const MAX_BYTES = 5 * 1024 * 1024;
 const ALLOWED_TYPES = new Set([
@@ -24,9 +22,41 @@ const ALLOWED_TYPES = new Set([
 ]);
 
 export async function POST(request: Request) {
+  if (!isSameOriginRequest(request)) {
+    return NextResponse.json(
+      { error: "Invalid request origin" },
+      { status: 403 },
+    );
+  }
+
   const session = await auth();
   if (!session?.user?.id) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const limits = await Promise.all([
+    checkRateLimit({
+      route: "todo.image-upload.user",
+      identity: session.user.id,
+      limit: 10,
+      windowMs: 60_000,
+    }),
+    checkRateLimit({
+      route: "todo.image-upload.ip",
+      identity: getClientIp(request.headers),
+      limit: 30,
+      windowMs: 60_000,
+    }),
+  ]);
+  const blocked = limits.find((limit) => !limit.allowed);
+  if (blocked) {
+    return NextResponse.json(
+      { error: "Too many uploads. Try again later." },
+      {
+        status: 429,
+        headers: { "Retry-After": String(blocked.retryAfter) },
+      },
+    );
   }
 
   const form = await request.formData();
@@ -64,32 +94,29 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Todo not found" }, { status: 404 });
   }
 
-  const extByType: Record<string, string> = {
-    "image/jpeg": "jpg",
-    "image/png": "png",
-    "image/webp": "webp",
-    "image/gif": "gif",
-  };
-  const ext = extByType[file.type] ?? "jpg";
-  const path = `${session.user.id}/${todoId}/${Date.now()}.${ext}`;
-
-  const supabase = createSupabaseBrowserClient();
   const buffer = Buffer.from(await file.arrayBuffer());
+  const imageUrl = `/api/todo/image/${todoId}?v=${Date.now()}`;
 
-  const { error: uploadError } = await supabase.storage
-    .from(TODO_IMAGES_BUCKET)
-    .upload(path, buffer, {
-      contentType: file.type,
-      upsert: true,
-    });
+  await db.$transaction([
+    db.todoImage.upsert({
+      where: { todoId },
+      create: {
+        todoId,
+        data: buffer,
+        mimeType: file.type,
+        size: file.size,
+      },
+      update: {
+        data: buffer,
+        mimeType: file.type,
+        size: file.size,
+      },
+    }),
+    db.todo.update({
+      where: { id: todoId },
+      data: { imageUrl },
+    }),
+  ]);
 
-  if (uploadError) {
-    return NextResponse.json({ error: uploadError.message }, { status: 500 });
-  }
-
-  const { data } = supabase.storage
-    .from(TODO_IMAGES_BUCKET)
-    .getPublicUrl(path);
-
-  return NextResponse.json({ imageUrl: data.publicUrl });
+  return NextResponse.json({ imageUrl });
 }

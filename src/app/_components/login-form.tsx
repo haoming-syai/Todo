@@ -11,8 +11,9 @@ import { signIn } from "next-auth/react";
 import { useState } from "react";
 
 import { IconGoogle } from "~/app/_components/icons";
+import { loginSchema } from "~/lib/validation/auth";
 
-export function LoginForm() {
+export function LoginForm({ notice }: { notice?: string }) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -21,11 +22,16 @@ export function LoginForm() {
   async function onEmailLogin(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
+    const parsed = loginSchema.safeParse({ email, password });
+    if (!parsed.success) {
+      setError(parsed.error.issues[0]?.message ?? "Check your details");
+      return;
+    }
     setPending(true);
 
     const result = await signIn("credentials", {
-      email,
-      password,
+      email: parsed.data.email,
+      password: parsed.data.password,
       redirect: false,
     });
 
@@ -41,6 +47,14 @@ export function LoginForm() {
 
   return (
     <div className="space-y-5">
+      {notice && (
+        <p
+          className="bg-panel text-ink rounded-md px-3 py-2 text-sm"
+          role="status"
+        >
+          {notice}
+        </p>
+      )}
       <form onSubmit={onEmailLogin} className="space-y-3">
         <div>
           <label htmlFor="login-email" className="label">
@@ -64,7 +78,7 @@ export function LoginForm() {
             id="login-password"
             type="password"
             required
-            minLength={6}
+            minLength={8}
             autoComplete="current-password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
@@ -72,19 +86,30 @@ export function LoginForm() {
           />
         </div>
         {error && (
-          <p className="text-sm text-danger" role="alert">
+          <p className="text-danger text-sm" role="alert">
             {error}
           </p>
         )}
         <button type="submit" disabled={pending} className="btn-primary w-full">
           {pending ? "Signing in…" : "Sign in with email"}
         </button>
+        <div className="flex justify-between gap-3 text-xs">
+          <Link
+            href="/forgot-password"
+            className="text-primary hover:underline"
+          >
+            Forgot password?
+          </Link>
+          <Link href="/verify-email" className="text-primary hover:underline">
+            Resend verification
+          </Link>
+        </div>
       </form>
 
-      <div className="flex items-center gap-3 text-xs text-faint">
-        <span className="h-px flex-1 bg-border" />
+      <div className="text-faint flex items-center gap-3 text-xs">
+        <span className="bg-border h-px flex-1" />
         or
-        <span className="h-px flex-1 bg-border" />
+        <span className="bg-border h-px flex-1" />
       </div>
 
       <button
@@ -96,9 +121,12 @@ export function LoginForm() {
         Continue with Google
       </button>
 
-      <p className="text-center text-sm text-muted">
+      <p className="text-muted text-center text-sm">
         No account?{" "}
-        <Link href="/register" className="font-medium text-primary hover:underline">
+        <Link
+          href="/register"
+          className="text-primary font-medium hover:underline"
+        >
           Create account
         </Link>
       </p>

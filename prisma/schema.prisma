@@ -2,15 +2,20 @@
 // learn more about it in the docs: https://pris.ly/d/prisma-schema
 
 generator client {
-    provider = "prisma-client-js"
-    output   = "../generated/prisma"
+  provider = "prisma-client-js"
+  output   = "../generated/prisma"
 }
 
 datasource db {
-    provider = "postgresql"
-    // DATABASE_URL = Supabase pooler (app queries). DIRECT_URL = direct :5432 (migrations / db push).
+  provider  = "postgresql"
+    // Neon CLI injects a pooled app URL and an unpooled migration URL.
     url       = env("DATABASE_URL")
-    directUrl = env("DIRECT_URL")
+    directUrl = env("DATABASE_URL_UNPOOLED")
+}
+
+enum AuthTokenType {
+  EMAIL_VERIFICATION
+  PASSWORD_RESET
 }
 
 // ============================================================================
@@ -20,103 +25,144 @@ datasource db {
 // ============================================================================
 
 model TodoList {
-    id        String   @id @default(cuid())
-    name      String
-    isShared  Boolean  @default(false)
-    createdAt DateTime @default(now())
-    updatedAt DateTime @updatedAt
+  id        String   @id @default(cuid())
+  name      String
+  isShared  Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-    ownerId String
-    owner   User   @relation("OwnedLists", fields: [ownerId], references: [id], onDelete: Cascade)
+  ownerId String
+  owner   User   @relation("OwnedLists", fields: [ownerId], references: [id], onDelete: Cascade)
 
-    members TodoListMember[]
-    todos   Todo[]
+  members TodoListMember[]
+  todos   Todo[]
 
-    @@index([ownerId])
+  @@index([ownerId])
 }
 
 model TodoListMember {
-    id       String   @id @default(cuid())
-    listId   String
-    userId   String
-    role     String   @default("MEMBER") // OWNER | MEMBER
-    joinedAt DateTime @default(now())
+  id       String   @id @default(cuid())
+  listId   String
+  userId   String
+  role     String   @default("MEMBER") // OWNER | MEMBER
+  joinedAt DateTime @default(now())
 
-    list TodoList @relation(fields: [listId], references: [id], onDelete: Cascade)
-    user User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  list TodoList @relation(fields: [listId], references: [id], onDelete: Cascade)
+  user User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-    @@unique([listId, userId])
-    @@index([userId])
+  @@unique([listId, userId])
+  @@index([userId])
 }
 
 model Todo {
-    id        String   @id @default(cuid())
-    title     String
-    completed Boolean  @default(false)
-    // S6: public URL from Supabase Storage (null until an image is attached)
-    imageUrl  String?
-    createdAt DateTime @default(now())
-    updatedAt DateTime @updatedAt
+  id        String   @id @default(cuid())
+  title     String
+  completed Boolean  @default(false)
+  // Same-origin authenticated URL, e.g. /api/todo/image/{todoId}?v=...
+  imageUrl  String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-    // A2: todo belongs to a list (access = list membership, not only creator)
-    listId String
-    list   TodoList @relation(fields: [listId], references: [id], onDelete: Cascade)
+  // A2: todo belongs to a list (access = list membership, not only creator)
+  listId String
+  list   TodoList @relation(fields: [listId], references: [id], onDelete: Cascade)
 
-    createdBy   User   @relation(fields: [createdById], references: [id], onDelete: Cascade)
-    createdById String
+  createdBy   User       @relation(fields: [createdById], references: [id], onDelete: Cascade)
+  createdById String
+  image       TodoImage?
 
-    @@index([listId])
-    @@index([createdById])
+  @@index([listId])
+  @@index([createdById])
+}
+
+model TodoImage {
+  id        String   @id @default(cuid())
+  todoId    String   @unique
+  data      Bytes
+  mimeType  String
+  size      Int
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  todo Todo @relation(fields: [todoId], references: [id], onDelete: Cascade)
 }
 
 // Necessary for Next auth
 model Account {
-    id                       String  @id @default(cuid())
-    userId                   String
-    type                     String
-    provider                 String
-    providerAccountId        String
-    refresh_token            String? // @db.Text
-    access_token             String? // @db.Text
-    expires_at               Int?
-    token_type               String?
-    scope                    String?
-    id_token                 String? // @db.Text
-    session_state            String?
-    user                     User    @relation(fields: [userId], references: [id], onDelete: Cascade)
-    refresh_token_expires_in Int?
+  id                       String  @id @default(cuid())
+  userId                   String
+  type                     String
+  provider                 String
+  providerAccountId        String
+  refresh_token            String? // @db.Text
+  access_token             String? // @db.Text
+  expires_at               Int?
+  token_type               String?
+  scope                    String?
+  id_token                 String? // @db.Text
+  session_state            String?
+  user                     User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  refresh_token_expires_in Int?
 
-    @@unique([provider, providerAccountId])
+  @@unique([provider, providerAccountId])
 }
 
 model Session {
-    id           String   @id @default(cuid())
-    sessionToken String   @unique
-    userId       String
-    expires      DateTime
-    user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 model User {
-    id            String    @id @default(cuid())
-    name          String?
-    email         String?   @unique
-    emailVerified DateTime?
-    image         String?
-    // S2: email/password users store a bcrypt hash here.
-    // Google-only users leave this null (they authenticate via Account table).
-    passwordHash  String?
-    accounts      Account[]
-    sessions      Session[]
-    todos         Todo[]
-    ownedLists    TodoList[]       @relation("OwnedLists")
-    memberships   TodoListMember[]
+  id                  String           @id @default(cuid())
+  name                String?
+  email               String?          @unique
+  emailVerified       DateTime?
+  image               String?
+  // S2: email/password users store a bcrypt hash here.
+  // Google-only users leave this null (they authenticate via Account table).
+  passwordHash        String?
+  failedLoginAttempts Int              @default(0)
+  lockedUntil         DateTime?
+  sessionVersion      Int              @default(0)
+  accounts            Account[]
+  sessions            Session[]
+  authTokens          AuthToken[]
+  todos               Todo[]
+  ownedLists          TodoList[]       @relation("OwnedLists")
+  memberships         TodoListMember[]
+}
+
+model AuthToken {
+  id        String        @id @default(cuid())
+  userId    String
+  tokenHash String        @unique
+  type      AuthTokenType
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime      @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, type])
+  @@index([expiresAt])
+}
+
+model RateLimitBucket {
+  keyHash   String   @id
+  count     Int      @default(1)
+  resetAt   DateTime
+  updatedAt DateTime @updatedAt
+
+  @@index([resetAt])
 }
 
 model VerificationToken {
-    identifier String
-    token      String   @unique
-    expires    DateTime
+  identifier String
+  token      String   @unique
+  expires    DateTime
 
-    @@unique([identifier, token])
+  @@unique([identifier, token])
 }

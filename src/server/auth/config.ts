@@ -19,8 +19,9 @@ import bcrypt from "bcryptjs";
 import { type DefaultSession, type NextAuthConfig } from "next-auth";
 import Credentials from "next-auth/providers/credentials";
 import Google from "next-auth/providers/google";
-import { z } from "zod";
 
+import { env } from "~/env";
+import { loginSchema } from "~/lib/validation/auth";
 import { db } from "~/server/db";
 
 /**
@@ -35,6 +36,93 @@ declare module "next-auth" {
   }
 }
 
+const credentialsProvider = Credentials({
+  name: "Email and Password",
+  credentials: {
+    email: { label: "Email", type: "email" },
+    password: { label: "Password", type: "password" },
+  },
+  async authorize(credentials) {
+    const parsed = loginSchema.safeParse(credentials);
+    if (!parsed.success) return null;
+
+    const user = await db.user.findUnique({
+      where: { email: parsed.data.email },
+    });
+
+    // Keep the work factor similar for unknown users to reduce timing leakage.
+    if (!user?.passwordHash) {
+      await bcrypt.compare(
+        parsed.data.password,
+        "$2b$10$C6UzMDM.H6dfI/f/IKcEe.5Hbp7lV5l5QqgXw8yQdY2ynYQ2wS4uK",
+      );
+      return null;
+    }
+
+    const now = new Date();
+    if (user.lockedUntil && user.lockedUntil > now) return null;
+
+    const valid = await bcrypt.compare(parsed.data.password, user.passwordHash);
+    if (!valid) {
+      const nextAttempts = user.failedLoginAttempts + 1;
+      await db.user.update({
+        where: { id: user.id },
+        data: {
+          failedLoginAttempts: { increment: 1 },
+          lockedUntil:
+            nextAttempts >= 5 ? new Date(now.getTime() + 15 * 60 * 1000) : null,
+        },
+      });
+      return null;
+    }
+
+    if (!user.emailVerified) {
+      // Compatibility for passwords reset before reset completion also marked
+      // the email verified. A consumed reset token proves inbox ownership.
+      const completedReset = await db.authToken.findFirst({
+        where: {
+          userId: user.id,
+          type: "PASSWORD_RESET",
+          usedAt: { not: null },
+        },
+        select: { id: true },
+      });
+      if (!completedReset) return null;
+    }
+
+    await db.user.update({
+      where: { id: user.id },
+      data: {
+        emailVerified: user.emailVerified ?? now,
+        failedLoginAttempts: 0,
+        lockedUntil: null,
+      },
+    });
+
+    return {
+      id: user.id,
+      name: user.name,
+      email: user.email,
+      image: user.image,
+    };
+  },
+});
+
+const providers: NextAuthConfig["providers"] = [credentialsProvider];
+
+if (env.AUTH_GOOGLE_ID && env.AUTH_GOOGLE_SECRET) {
+  providers.unshift(
+    Google({
+      clientId: env.AUTH_GOOGLE_ID,
+      clientSecret: env.AUTH_GOOGLE_SECRET,
+      // Google only returns the user's verified email address. Allow Auth.js to
+      // attach Google to an existing credentials account with that same email
+      // instead of failing with OAuthAccountNotLinked.
+      allowDangerousEmailAccountLinking: true,
+    }),
+  );
+}
+
 /**
  * Why JWT session strategy?
  * Credentials provider does NOT create a DB Session row the way Google OAuth does.
@@ -42,62 +130,16 @@ declare module "next-auth" {
  * PrismaAdapter still saves User + Account for Google logins.
  */
 export const authConfig = {
-  providers: [
-    // Reads AUTH_GOOGLE_ID + AUTH_GOOGLE_SECRET from env automatically
-    Google,
-
-    Credentials({
-      name: "Email and Password",
-      credentials: {
-        email: { label: "Email", type: "email" },
-        password: { label: "Password", type: "password" },
-      },
-      /**
-       * authorize() runs on the server when someone calls signIn("credentials", …).
-       * Return a user object → login succeeds.
-       * Return null → login fails (wrong email/password).
-       */
-      async authorize(credentials) {
-        const parsed = z
-          .object({
-            email: z.string().email(),
-            password: z.string().min(1),
-          })
-          .safeParse(credentials);
-
-        if (!parsed.success) return null;
-
-        const email = parsed.data.email.trim().toLowerCase();
-
-        const user = await db.user.findFirst({
-          where: { email: { equals: email, mode: "insensitive" } },
-        });
-
-        // No user, or Google-only user without a password → reject
-        if (!user?.passwordHash) return null;
-
-        const valid = await bcrypt.compare(
-          parsed.data.password,
-          user.passwordHash,
-        );
-        if (!valid) return null;
-
-        // Shape Auth.js expects
-        return {
-          id: user.id,
-          name: user.name,
-          email: user.email,
-          image: user.image,
-        };
-      },
-    }),
-  ],
+  providers,
 
   adapter: PrismaAdapter(db),
 
   session: {
     strategy: "jwt",
+    maxAge: 30 * 24 * 60 * 60,
   },
+
+  trustHost: true,
 
   pages: {
     // Use our custom UI instead of the default Auth.js sign-in page
@@ -110,17 +152,20 @@ export const authConfig = {
     jwt: async ({ token, user }) => {
       if (user) {
         token.id = user.id;
-        return token;
       }
 
       if (typeof token.id === "string") {
-        const exists = await db.user.findUnique({
+        const current = await db.user.findUnique({
           where: { id: token.id },
-          select: { id: true },
+          select: { sessionVersion: true },
         });
-        if (!exists) {
+        if (!current) return {};
+        if (
+          token.sessionVersion !== undefined &&
+          token.sessionVersion !== current.sessionVersion
+        )
           return {};
-        }
+        token.sessionVersion = current.sessionVersion;
       }
 
       return token;
@@ -138,6 +183,23 @@ export const authConfig = {
           id: token.id as string,
         },
       };
+    },
+  },
+
+  events: {
+    createUser: async ({ user }) => {
+      await db.user.update({
+        where: { id: user.id },
+        data: { emailVerified: new Date() },
+      });
+    },
+    signIn: async ({ user, account }) => {
+      if (account?.type === "oauth") {
+        await db.user.update({
+          where: { id: user.id },
+          data: { emailVerified: new Date() },
+        });
+      }
     },
   },
 } satisfies NextAuthConfig;

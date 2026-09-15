@@ -4,6 +4,7 @@ import { type NextRequest } from "next/server";
 import { env } from "~/env";
 import { appRouter } from "~/server/api/root";
 import { createTRPCContext } from "~/server/api/trpc";
+import { isSameOriginRequest } from "~/server/security/request";
 
 /**
  * This wraps the `createTRPCContext` helper and provides the required context for the tRPC API when
@@ -31,4 +32,14 @@ const handler = (req: NextRequest) =>
         : undefined,
   });
 
-export { handler as GET, handler as POST };
+export const GET = handler;
+
+export function POST(req: NextRequest) {
+  if (!isSameOriginRequest(req)) {
+    return new Response(JSON.stringify({ error: "Invalid request origin" }), {
+      status: 403,
+      headers: { "Content-Type": "application/json" },
+    });
+  }
+  return handler(req);
+}

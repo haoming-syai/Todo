@@ -8,11 +8,12 @@ import Link from "next/link";
 
 import { BrandLockup } from "~/app/_components/brand";
 import { TodoAppLoader } from "~/app/_components/todo-app-loader";
+import { SignOutButton } from "~/app/_components/sign-out-button";
 import { auth } from "~/server/auth";
 import { api, caller, HydrateClient } from "~/trpc/server";
 
 function initials(name?: string | null, email?: string | null) {
-  const source = name?.trim() || email?.split("@")[0] || "?";
+  const source = name?.trim() ?? email?.split("@")[0] ?? "?";
   const parts = source.split(/\s+/).filter(Boolean);
   if (parts.length >= 2) {
     return `${parts[0]![0]!}${parts[1]![0]!}`.toUpperCase();
@@ -38,19 +39,17 @@ export default async function Home() {
     <HydrateClient>
       {user ? (
         <div className="flex min-h-dvh flex-col">
-          <header className="sticky top-0 z-20 border-b border-border bg-bg">
+          <header className="border-border bg-bg sticky top-0 z-20 border-b">
             <div className="flex h-14 items-center justify-between gap-4 px-4 lg:px-5">
               <BrandLockup />
               <div className="flex items-center gap-2">
                 <span
-                  className="hidden size-7 items-center justify-center rounded-full bg-panel text-[11px] font-medium text-ink sm:inline-flex"
+                  className="bg-panel text-ink hidden size-7 items-center justify-center rounded-full text-[11px] font-medium sm:inline-flex"
                   title={user.name ?? user.email ?? undefined}
                 >
                   {initials(user.name, user.email)}
                 </span>
-                <Link href="/api/auth/signout" className="btn-ghost h-8 px-2.5">
-                  Sign out
-                </Link>
+                <SignOutButton />
               </div>
             </div>
           </header>
@@ -64,10 +63,10 @@ export default async function Home() {
           <div className="w-full max-w-md space-y-8">
             <div className="space-y-4 text-center">
               <BrandLockup />
-              <h1 className="text-balance text-3xl font-semibold tracking-tight text-ink">
+              <h1 className="text-ink text-3xl font-semibold tracking-tight text-balance">
                 What needs doing, together or alone.
               </h1>
-              <p className="text-pretty text-muted">
+              <p className="text-muted text-pretty">
                 Keep a personal list, then invite people by email when a task
                 belongs to more than one person.
               </p>

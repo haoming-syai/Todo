@@ -5,6 +5,10 @@
 import "./src/env.js";
 
 /** @type {import("next").NextConfig} */
-const config = {};
+const config = {
+  // Keep output tracing inside this repository. On Windows, following legacy
+  // profile junctions such as `Application Data` causes EPERM during builds.
+  outputFileTracingRoot: process.cwd(),
+};
 
 export default config;

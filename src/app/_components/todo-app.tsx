@@ -16,7 +16,7 @@ import {
   IconPlus,
   IconTrash,
 } from "~/app/_components/icons";
-import { useTodoRealtime } from "~/hooks/use-todo-realtime";
+import { useTodoPolling } from "~/hooks/use-todo-polling";
 import { api } from "~/trpc/react";
 
 type ListItem = {
@@ -91,13 +91,13 @@ export function TodoApp() {
 
   return (
     <div className="flex min-h-0 w-full flex-1 flex-col lg:flex-row">
-      <aside className="border-b border-border bg-rail px-3 py-4 lg:w-60 lg:border-r lg:border-b-0 lg:py-5">
+      <aside className="border-border bg-rail border-b px-3 py-4 lg:w-60 lg:border-r lg:border-b-0 lg:py-5">
         <div className="space-y-5">
           <nav aria-label="Personal lists" className="space-y-1.5">
-            <p className="px-2.5 text-xs font-medium text-faint">Personal</p>
+            <p className="text-faint px-2.5 text-xs font-medium">Personal</p>
             <ul className="flex gap-1 overflow-x-auto pb-0.5 lg:block lg:space-y-0.5 lg:overflow-visible lg:pb-0">
               {personal.length === 0 && (
-                <li className="hidden px-2.5 py-1 text-xs text-faint lg:block">
+                <li className="text-faint hidden px-2.5 py-1 text-xs lg:block">
                   None yet — create one below.
                 </li>
               )}
@@ -144,10 +144,10 @@ export function TodoApp() {
           </nav>
 
           <nav aria-label="Shared lists" className="space-y-1.5">
-            <p className="px-2.5 text-xs font-medium text-faint">Shared</p>
+            <p className="text-faint px-2.5 text-xs font-medium">Shared</p>
             <ul className="flex gap-1 overflow-x-auto pb-0.5 lg:block lg:space-y-0.5 lg:overflow-visible lg:pb-0">
               {shared.length === 0 && (
-                <li className="hidden px-2.5 py-1 text-xs text-faint lg:block">
+                <li className="text-faint hidden px-2.5 py-1 text-xs lg:block">
                   None yet — create one below.
                 </li>
               )}
@@ -193,7 +193,7 @@ export function TodoApp() {
             </form>
           </nav>
           {createList.error && (
-            <p className="px-2.5 text-xs text-danger" role="alert">
+            <p className="text-danger px-2.5 text-xs" role="alert">
               {createList.error.message}
             </p>
           )}
@@ -222,7 +222,7 @@ export function TodoApp() {
                       onKeyDown={(e) => {
                         if (e.key === "Enter") {
                           e.preventDefault();
-                          (e.currentTarget as HTMLInputElement).blur();
+                          e.currentTarget.blur();
                         }
                         if (e.key === "Escape") setEditingList(false);
                       }}
@@ -237,14 +237,14 @@ export function TodoApp() {
                           setListNameDraft(active.name);
                           setEditingList(true);
                         }}
-                        className="max-w-full truncate text-left text-xl font-semibold tracking-tight text-ink"
+                        className="text-ink max-w-full truncate text-left text-xl font-semibold tracking-tight"
                         title="Rename list"
                       >
                         {active.name}
                       </button>
                     </h1>
                   ) : (
-                    <h1 className="text-xl font-semibold tracking-tight text-ink">
+                    <h1 className="text-ink text-xl font-semibold tracking-tight">
                       {active.name}
                     </h1>
                   )}
@@ -257,7 +257,7 @@ export function TodoApp() {
                   </span>
                 </div>
                 {active.isShared && (
-                  <p className="text-sm text-muted">
+                  <p className="text-muted text-sm">
                     {active.members
                       .map((m) => m.user.name ?? m.user.email ?? "member")
                       .join(" · ")}
@@ -286,9 +286,7 @@ export function TodoApp() {
                         count > 0
                           ? ` This removes ${count} item${count === 1 ? "" : "s"} too.`
                           : "";
-                      if (
-                        confirm(`Delete "${active.name}"?${extra}`)
-                      ) {
+                      if (confirm(`Delete "${active.name}"?${extra}`)) {
                         deleteList.mutate({ id: active.id });
                       }
                     }}
@@ -301,7 +299,7 @@ export function TodoApp() {
             </div>
 
             {(updateList.error ?? deleteList.error) && (
-              <p className="text-sm text-danger" role="alert">
+              <p className="text-danger text-sm" role="alert">
                 {updateList.error?.message ?? deleteList.error?.message}
               </p>
             )}
@@ -320,7 +318,7 @@ export function TodoApp() {
             <TodoPanel listId={active.id} />
           </div>
         ) : (
-          <p className="text-sm text-muted">Select a list to get started.</p>
+          <p className="text-muted text-sm">Select a list to get started.</p>
         )}
       </section>
     </div>
@@ -345,11 +343,14 @@ function ListButton({
     >
       <span className="flex min-w-0 items-center gap-2">
         {list.isShared && (
-          <span className="size-1.5 shrink-0 rounded-full bg-accent" aria-hidden />
+          <span
+            className="bg-accent size-1.5 shrink-0 rounded-full"
+            aria-hidden
+          />
         )}
         <span className="truncate">{list.name}</span>
       </span>
-      <span className="tabular-nums text-xs text-faint">
+      <span className="text-faint text-xs tabular-nums">
         {list._count.todos}
       </span>
     </button>
@@ -393,12 +394,12 @@ function InviteForm({
           className="field"
           aria-label="Invite email"
         />
-        <p className="mt-1 text-xs text-faint">
+        <p className="text-faint mt-1 text-xs">
           They must already have an account
           {turnsShared ? " — this list then becomes shared." : "."}
         </p>
         {error && (
-          <p className="mt-1 text-xs text-danger" role="alert">
+          <p className="text-danger mt-1 text-xs" role="alert">
             {error}
           </p>
         )}
@@ -421,7 +422,7 @@ function TodoPanel({ listId }: { listId: string }) {
   const [uploadingId, setUploadingId] = useState<string | null>(null);
   const [uploadError, setUploadError] = useState<string | null>(null);
 
-  const realtimeStatus = useTodoRealtime(listId);
+  const pollingStatus = useTodoPolling(listId);
   const [todos] = api.todo.getByList.useSuspenseQuery({ listId });
   const utils = api.useUtils();
 
@@ -450,17 +451,6 @@ function TodoPanel({ listId }: { listId: string }) {
     },
   });
 
-  const attachImage = api.todo.attachImage.useMutation({
-    onSuccess: async () => {
-      await invalidateList();
-      setUploadingId(null);
-    },
-    onError: (err) => {
-      setUploadError(err.message);
-      setUploadingId(null);
-    },
-  });
-
   const removeImage = api.todo.removeImage.useMutation({
     onSuccess: async () => {
       await invalidateList();
@@ -484,7 +474,8 @@ function TodoPanel({ listId }: { listId: string }) {
         throw new Error(json.error ?? "Upload failed");
       }
 
-      attachImage.mutate({ id: todoId, imageUrl: json.imageUrl });
+      await invalidateList();
+      setUploadingId(null);
     } catch (err) {
       setUploadingId(null);
       setUploadError(err instanceof Error ? err.message : "Upload failed");
@@ -520,26 +511,16 @@ function TodoPanel({ listId }: { listId: string }) {
       </form>
 
       <div
-        className="flex items-center gap-1.5 text-xs text-faint"
+        className="text-faint flex items-center gap-1.5 text-xs"
         aria-live="polite"
       >
         <span
           className={`size-1.5 rounded-full ${
-            realtimeStatus === "live"
-              ? "bg-success"
-              : realtimeStatus === "error"
-                ? "bg-danger"
-                : "bg-faint"
+            pollingStatus === "polling" ? "bg-success" : "bg-faint"
           }`}
           aria-hidden
         />
-        {realtimeStatus === "live"
-          ? "Updates live"
-          : realtimeStatus === "subscribing"
-            ? "Connecting…"
-            : realtimeStatus === "error"
-              ? "Offline — refresh if changes stall"
-              : "Idle"}
+        {pollingStatus === "polling" ? "Checking for updates" : "Idle"}
       </div>
 
       {(createTodo.error ??
@@ -547,7 +528,7 @@ function TodoPanel({ listId }: { listId: string }) {
         deleteTodo.error ??
         removeImage.error ??
         uploadError) && (
-        <p className="text-sm text-danger" role="alert">
+        <p className="text-danger text-sm" role="alert">
           {createTodo.error?.message ??
             updateTodo.error?.message ??
             deleteTodo.error?.message ??
@@ -557,18 +538,18 @@ function TodoPanel({ listId }: { listId: string }) {
       )}
 
       {!todos.length ? (
-        <div className="rounded-lg border border-dashed border-border px-5 py-12 text-center">
-          <p className="font-medium text-ink">This list is empty</p>
-          <p className="mx-auto mt-1 max-w-[28ch] text-sm text-muted">
+        <div className="border-border rounded-lg border border-dashed px-5 py-12 text-center">
+          <p className="text-ink font-medium">This list is empty</p>
+          <p className="text-muted mx-auto mt-1 max-w-[28ch] text-sm">
             Type above and add. Shared members see new items as they land.
           </p>
         </div>
       ) : (
-        <ul className="divide-y divide-border overflow-hidden rounded-lg border border-border bg-bg">
+        <ul className="divide-border border-border bg-bg divide-y overflow-hidden rounded-lg border">
           {todos.map((todo) => (
             <li
               key={todo.id}
-              className="group px-4 py-3 transition-colors duration-150 ease-out hover:bg-surface"
+              className="group hover:bg-surface px-4 py-3 transition-colors duration-150 ease-out"
             >
               <div className="flex items-start gap-3">
                 <input
@@ -615,27 +596,25 @@ function TodoPanel({ listId }: { listId: string }) {
                         setEditingTitle(todo.title);
                       }}
                       className={`w-full text-left text-sm transition-opacity duration-150 ease-out ${
-                        todo.completed
-                          ? "text-faint line-through"
-                          : "text-ink"
+                        todo.completed ? "text-faint line-through" : "text-ink"
                       }`}
                     >
                       {todo.title}
                     </button>
                   )}
 
-                  {(todo.imageUrl || uploadingId === todo.id) && (
+                  {(todo.imageUrl ? true : uploadingId === todo.id) && (
                     <div className="flex items-center gap-2">
                       {todo.imageUrl ? (
                         // eslint-disable-next-line @next/next/no-img-element
                         <img
                           src={todo.imageUrl}
                           alt=""
-                          className="h-14 w-14 rounded-md border border-border object-cover"
+                          className="border-border h-14 w-14 rounded-md border object-cover"
                         />
                       ) : null}
                       {uploadingId === todo.id && (
-                        <p className="text-xs text-faint">Uploading…</p>
+                        <p className="text-faint text-xs">Uploading…</p>
                       )}
                     </div>
                   )}

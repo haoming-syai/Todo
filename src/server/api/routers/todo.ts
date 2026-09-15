@@ -10,15 +10,8 @@ import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 
 import {
-  createSupabaseBrowserClient,
-  TODO_IMAGES_BUCKET,
-} from "~/lib/supabase/client";
-import {
   requireListMember,
   requireTodoViaMembership,
-  storagePathFromPublicUrl,
-  isImageUrlForTodo,
-  removeStorageObject,
 } from "~/server/lib/ensure-personal-list";
 import { createTRPCRouter, protectedProcedure } from "~/server/api/trpc";
 
@@ -78,7 +71,7 @@ export const todoRouter = createTRPCRouter({
       });
     }),
 
-  /** S5 — delete todo (+ Storage file if any) */
+  /** S5 — delete todo; its TodoImage cascades in Neon. */
   delete: protectedProcedure
     .input(z.object({ id: z.string().min(1) }))
     .mutation(async ({ ctx, input }) => {
@@ -88,41 +81,13 @@ export const todoRouter = createTRPCRouter({
         ctx.session.user.id,
       );
 
-      if (todo.imageUrl) {
-        await removeStorageObject(todo.imageUrl);
-      }
-
       await ctx.db.todo.delete({ where: { id: todo.id } });
       return { ok: true as const };
     }),
 
-  /** S6 — attach image URL */
-  attachImage: protectedProcedure
-    .input(
-      z.object({
-        id: z.string().min(1),
-        imageUrl: z.string().url(),
-      }),
-    )
-    .mutation(async ({ ctx, input }) => {
-      await requireTodoViaMembership(ctx.db, input.id, ctx.session.user.id);
-
-      if (!isImageUrlForTodo(input.imageUrl, TODO_IMAGES_BUCKET, input.id)) {
-        throw new TRPCError({
-          code: "BAD_REQUEST",
-          message: "Image URL is not a valid upload for this todo",
-        });
-      }
-
-      return ctx.db.todo.update({
-        where: { id: input.id },
-        data: { imageUrl: input.imageUrl },
-      });
-    }),
-
   /**
    * S6+ — delete photo only (keep the todo)
-   * Clears imageUrl and removes the file via anon key (public bucket + policies).
+   * Clears imageUrl and deletes the corresponding Neon TodoImage row.
    */
   removeImage: protectedProcedure
     .input(z.object({ id: z.string().min(1) }))
@@ -140,23 +105,13 @@ export const todoRouter = createTRPCRouter({
         });
       }
 
-      const path = storagePathFromPublicUrl(todo.imageUrl, TODO_IMAGES_BUCKET);
-      if (path) {
-        const supabase = createSupabaseBrowserClient();
-        const { error } = await supabase.storage
-          .from(TODO_IMAGES_BUCKET)
-          .remove([path]);
-        if (error) {
-          throw new TRPCError({
-            code: "INTERNAL_SERVER_ERROR",
-            message: error.message,
-          });
-        }
-      }
-
-      return ctx.db.todo.update({
-        where: { id: todo.id },
-        data: { imageUrl: null },
-      });
+      const [, updated] = await ctx.db.$transaction([
+        ctx.db.todoImage.deleteMany({ where: { todoId: todo.id } }),
+        ctx.db.todo.update({
+          where: { id: todo.id },
+          data: { imageUrl: null },
+        }),
+      ]);
+      return updated;
     }),
 });

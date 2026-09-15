@@ -87,7 +87,13 @@ export function IconPeople({ className }: { className?: string }) {
         strokeWidth="1.3"
         strokeLinecap="round"
       />
-      <circle cx="11.2" cy="6" r="1.6" stroke="currentColor" strokeWidth="1.3" />
+      <circle
+        cx="11.2"
+        cy="6"
+        r="1.6"
+        stroke="currentColor"
+        strokeWidth="1.3"
+      />
       <path
         d="M10.4 13c.3-1.5 1.2-2.4 2.5-2.6"
         stroke="currentColor"

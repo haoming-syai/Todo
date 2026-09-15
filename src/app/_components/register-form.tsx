@@ -7,9 +7,9 @@
  */
 
 import Link from "next/link";
-import { signIn } from "next-auth/react";
 import { useState } from "react";
 
+import { registerSchema } from "~/lib/validation/auth";
 import { api } from "~/trpc/react";
 
 export function RegisterForm() {
@@ -17,24 +17,31 @@ export function RegisterForm() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [complete, setComplete] = useState(false);
 
   const register = api.auth.register.useMutation({
-    onSuccess: async () => {
-      const result = await signIn("credentials", {
-        email,
-        password,
-        redirect: false,
-      });
-      if (result?.error) {
-        setError("Account created, but auto sign-in failed. Try logging in.");
-        return;
-      }
-      window.location.href = "/";
+    onSuccess: () => {
+      setComplete(true);
     },
     onError: (err) => {
       setError(err.message);
     },
   });
+
+  if (complete) {
+    return (
+      <div className="space-y-4 text-sm">
+        <p className="text-ink font-medium">Check your email</p>
+        <p className="text-muted">
+          If the address can be registered, we sent a verification link. Verify
+          it before signing in.
+        </p>
+        <Link href="/login" className="btn-primary w-full">
+          Back to sign in
+        </Link>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-5">
@@ -42,7 +49,12 @@ export function RegisterForm() {
         onSubmit={(e) => {
           e.preventDefault();
           setError(null);
-          register.mutate({ name, email, password });
+          const parsed = registerSchema.safeParse({ name, email, password });
+          if (!parsed.success) {
+            setError(parsed.error.issues[0]?.message ?? "Check your details");
+            return;
+          }
+          register.mutate(parsed.data);
         }}
         className="space-y-3"
       >
@@ -82,16 +94,16 @@ export function RegisterForm() {
             id="reg-password"
             type="password"
             required
-            minLength={6}
+            minLength={8}
             autoComplete="new-password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             className="field"
-            placeholder="At least 6 characters"
+            placeholder="At least 8 characters"
           />
         </div>
         {error && (
-          <p className="text-sm text-danger" role="alert">
+          <p className="text-danger text-sm" role="alert">
             {error}
           </p>
         )}
@@ -104,9 +116,12 @@ export function RegisterForm() {
         </button>
       </form>
 
-      <p className="text-center text-sm text-muted">
+      <p className="text-muted text-center text-sm">
         Already have an account?{" "}
-        <Link href="/login" className="font-medium text-primary hover:underline">
+        <Link
+          href="/login"
+          className="text-primary font-medium hover:underline"
+        >
           Sign in
         </Link>
       </p>

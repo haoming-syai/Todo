@@ -13,6 +13,8 @@ import { ZodError } from "zod";
 
 import { auth } from "~/server/auth";
 import { db } from "~/server/db";
+import { getClientIp } from "~/server/security/request";
+import { enforceRateLimit } from "~/server/security/rate-limit";
 
 /**
  * 1. CONTEXT
@@ -32,6 +34,7 @@ export const createTRPCContext = async (opts: { headers: Headers }) => {
   return {
     db,
     session,
+    ip: getClientIp(opts.headers),
     ...opts,
   };
 };
@@ -120,10 +123,26 @@ export const publicProcedure = t.procedure.use(timingMiddleware);
  */
 export const protectedProcedure = t.procedure
   .use(timingMiddleware)
-  .use(({ ctx, next }) => {
+  .use(async ({ ctx, next, path }) => {
     if (!ctx.session?.user?.id) {
       throw new TRPCError({ code: "UNAUTHORIZED" });
     }
+
+    await Promise.all([
+      enforceRateLimit({
+        route: `trpc.${path}.user`,
+        identity: ctx.session.user.id,
+        limit: 120,
+        windowMs: 60_000,
+      }),
+      enforceRateLimit({
+        route: `trpc.${path}.ip`,
+        identity: ctx.ip,
+        limit: 240,
+        windowMs: 60_000,
+      }),
+    ]);
+
     return next({
       ctx: {
         // infers the `session` as non-nullable

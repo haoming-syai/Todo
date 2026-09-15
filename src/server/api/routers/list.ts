@@ -9,7 +9,6 @@ import { z } from "zod";
 
 import {
   ensurePersonalList,
-  removeStorageObject,
   requireListMember,
   requireListOwner,
 } from "~/server/lib/ensure-personal-list";
@@ -87,16 +86,6 @@ export const listRouter = createTRPCRouter({
     .input(z.object({ id: z.string().min(1) }))
     .mutation(async ({ ctx, input }) => {
       await requireListOwner(ctx.db, input.id, ctx.session.user.id);
-
-      const images = await ctx.db.todo.findMany({
-        where: { listId: input.id, NOT: { imageUrl: null } },
-        select: { imageUrl: true },
-      });
-      await Promise.all(
-        images.map((todo) =>
-          todo.imageUrl ? removeStorageObject(todo.imageUrl) : Promise.resolve(),
-        ),
-      );
 
       await ctx.db.todoList.delete({ where: { id: input.id } });
       return { ok: true as const };
